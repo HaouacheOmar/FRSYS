@@ -1,23 +1,21 @@
-"""
-ASGI config for FRSYS project.
-
-It exposes the ASGI callable as a module-level variable named ``application``.
-
-For more information on this file, see
-https://docs.djangoproject.com/en/6.0/howto/deployment/asgi/
-"""
-
 import os
-import sys
-from pathlib import Path
-
+import django
+from channels.routing import ProtocolTypeRouter, URLRouter
+from channels.auth import AuthMiddlewareStack
 from django.core.asgi import get_asgi_application
-
-# Ensure top-level packages (e.g., FR_BACK/app) are importable.
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-	sys.path.insert(0, str(PROJECT_ROOT))
+import app.routing
 
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'FRSYS.settings')
+django.setup()
 
-application = get_asgi_application()
+application = ProtocolTypeRouter({
+    # http
+    "http": get_asgi_application(),
+
+    # ws
+    "websocket": AuthMiddlewareStack(
+        URLRouter(
+            app.routing.websocket_urlpatterns
+        )
+    ),
+})
