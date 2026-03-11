@@ -1,0 +1,357 @@
+.checkins-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  min-height: 80vh;
+}
+
+.checkins-container h1 {
+  color: #333;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.checkins-content {
+  display: block;
+  margin-top: 30px;
+}
+
+@media (max-width: 1024px) {
+  .checkins-content {
+    display: block;
+  }
+}
+
+/* Face Indicator */
+.face-indicator {
+  width: 200px;
+  height: 200px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.face-indicator-large {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.status-svg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Status Colors */
+.face-green {
+  background: transparent;
+  box-shadow: 0 0 20px rgba(76, 175, 80, 0.3);
+}
+
+.face-orange {
+  background: transparent;
+  box-shadow: 0 0 20px rgba(255, 152, 0, 0.3);
+}
+
+.face-red {
+  background: transparent;
+  box-shadow: 0 0 20px rgba(244, 67, 54, 0.3);
+}
+
+.face-gray {
+  background: transparent;
+  opacity: 0.6;
+}
+
+/* Pulse Animation */
+.face-green .status-pulse {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  animation: pulse-green 2s infinite;
+}
+
+.face-orange .status-pulse {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  animation: pulse-orange 2s infinite;
+}
+
+.face-red .status-pulse {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-green {
+  0% {
+    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7);
+    opacity: 0.7;
+  }
+  50% {
+    box-shadow: 0 0 0 15px rgba(76, 175, 80, 0);
+    opacity: 0;
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes pulse-orange {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 152, 0, 0.7);
+    opacity: 0.7;
+  }
+  50% {
+    box-shadow: 0 0 0 15px rgba(255, 152, 0, 0);
+    opacity: 0;
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 152, 0, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes pulse-red {
+  0% {
+    box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.7);
+    opacity: 0.7;
+  }
+  50% {
+    box-shadow: 0 0 0 15px rgba(244, 67, 54, 0);
+    opacity: 0;
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(244, 67, 54, 0);
+    opacity: 0;
+  }
+}
+
+/* Person Card - Two column layout */
+.person-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 30px;
+  animation: slideIn 0.5s ease;
+}
+
+.person-card-info {
+  background: transparent;
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.person-card-info:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.person-card-avatar {
+  background: transparent;
+  padding: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 300px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.person-info {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.person-header h2 {
+  margin: 0;
+  color: #1a1a1a;
+  font-size: 32px;
+  font-weight: 600;
+}
+
+.matricule {
+  margin: 5px 0 0 0;
+  color: #7f8c8d;
+  font-size: 14px;
+}
+
+.person-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.detail-label {
+  font-weight: 700;
+  color: #1a1a1a;
+  min-width: 90px;
+  font-size: 16px;
+}
+
+.detail-value {
+  color: #ff9800;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.detail-value.status-green {
+  color: #4caf50;
+  font-weight: bold;
+}
+
+.detail-value.status-orange {
+  color: #ff9800;
+  font-weight: bold;
+}
+
+.detail-value.status-red {
+  color: #f44336;
+  font-weight: bold;
+}
+
+.error-text {
+  color: #f44336;
+  font-weight: bold;
+}
+
+/* Status Badge */
+.status-badge {
+  padding: 12px 24px;
+  border-radius: 24px;
+  font-weight: 600;
+  text-align: center;
+  align-self: flex-start;
+  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.status-badge-green {
+  background-color: transparent;
+  color: #4caf50;
+  border: 2px solid #4caf50;
+}
+
+.status-badge-orange {
+  background-color: transparent;
+  color: #ff9800;
+  border: 2px solid #ff9800;
+}
+
+.status-badge-red {
+  background-color: transparent;
+  color: #f44336;
+  border: 2px solid #f44336;
+}
+
+/* Detections Grid */
+.current-detections h3 {
+  color: #333;
+  margin-bottom: 20px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.detections-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .person-card {
+    grid-template-columns: 1fr;
+  }
+  
+  .person-card-avatar {
+    min-width: auto;
+    padding: 30px;
+    order: -1;
+  }
+  
+  .face-indicator {
+    width: 150px;
+    height: 150px;
+  }
+}
+
+.no-detections {
+  text-align: center;
+  padding: 60px 20px;
+  color: #999;
+}
+
+.no-detections .face-indicator {
+  margin: 0 auto 20px auto;
+}
+
+.no-detections p {
+  font-size: 18px;
+}
+
+/* Status and Controls (inherited from Common.css but specific overrides) */
+.checkins-container .status {
+  text-align: center;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.checkins-container .controls {
+  text-align: center;
+  margin: 20px 0;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.checkins-container .error {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 10px;
+  margin: 10px 0;
+  border-radius: 4px;
+  border: 1px solid #f5c6cb;
+}
