@@ -1,0 +1,107 @@
+# Python virtual environments
+nvenv/
+venv/
+env/
+.venv/
+ENV/
+
+# Django
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Django migrations (keep versioned but ignore local test migrations)
+ADMINISTRATION_POST/DJANGO_SERVER/server/migrations/0*.py
+!ADMINISTRATION_POST/DJANGO_SERVER/server/migrations/__init__.py
+
+# Django database
+db.sqlite3
+db.sqlite3-journal
+*.db
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+ADMINISTRATION_POST/DJANGO_SERVER/.env
+ADMINISTRATION_POST/DJANGO_SERVER/.env.local
+
+# IDE & Editor
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Node/React
+node_modules/
+npm-debug.log
+yarn-error.log
+SURVEILLANCE_POST/REACT_CLIENT/dist/
+SURVEILLANCE_POST/REACT_CLIENT/build/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+.~*
+
+# IDEs specific
+*.iml
+.classpath
+.project
+.settings/
+*.code-workspace
+
+# Development artifacts
+.env.example (if not needed)
+.cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
