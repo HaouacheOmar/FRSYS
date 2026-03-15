@@ -68,7 +68,7 @@ FRv1.0.1_ClientServer/
    # Install Python dependencies
    cd DJANGO_SERVER
    pip install -r ..\MODEL_SERVER\requirements.txt
-   pip install psycopg2-binary django-cors-headers channels daphne
+   pip install psycopg2-binary django-cors-headers channels daphne djangorestframework django-filter djangorestframework-simplejwt cryptography
    
    # Configure environment
    cp .env.example .env

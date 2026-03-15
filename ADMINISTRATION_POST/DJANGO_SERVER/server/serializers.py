@@ -20,9 +20,34 @@ class PersonSerializer(serializers.ModelSerializer):
 
 # serializer for camera data
 class CameraSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    has_password = serializers.SerializerMethodField(read_only=True)
+
+    def get_has_password(self, obj):
+        return bool(obj.password)
+
+    def create(self, validated_data):
+        raw_password = validated_data.pop('password', None)
+        camera = Camera(**validated_data)
+        if raw_password is not None:
+            camera.set_camera_password(raw_password)
+        camera.save()
+        return camera
+
+    def update(self, instance, validated_data):
+        raw_password = validated_data.pop('password', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        if raw_password is not None:
+            instance.set_camera_password(raw_password)
+
+        instance.save()
+        return instance
+
     class Meta:
         model = Camera
-        fields = ["id", "ip_address", "model_name", "username", "password", "is_active", "rtsp_port", "rtsp_path"]
+        fields = ["id", "ip_address", "model_name", "username", "password", "has_password", "is_active", "rtsp_port", "rtsp_path"]
 
 # serializer for outing records
 class SpectacleSerializer(serializers.ModelSerializer):

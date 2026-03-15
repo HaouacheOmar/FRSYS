@@ -81,6 +81,35 @@
   transform: translateY(0);
 }
 
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nav-user {
+  color: #d8e6f2;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 8px 10px;
+  border-radius: 6px;
+  text-transform: lowercase;
+}
+
+.logout-btn {
+  background-color: #8e2b2b;
+  color: white;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.logout-btn:hover {
+  background-color: #742222;
+}
+
 @media (max-width: 768px) {
   .nav-container {
     flex-direction: column;
@@ -94,5 +123,11 @@
 
   .nav-link {
     width: 100%;
+  }
+
+  .nav-actions {
+    width: 100%;
+    flex-wrap: wrap;
+    margin: 10px 0;
   }
 }

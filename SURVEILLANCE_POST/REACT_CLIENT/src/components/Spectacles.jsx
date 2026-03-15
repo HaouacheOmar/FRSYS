@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { spectaclesAPI, personsAPI, API_BASE_URL } from '../services/api';
+import { useLang } from '../context/LangContext';
 
 const Spectacles = () => {
+  const { T } = useLang();
   const [spectacles, setSpectacles] = useState([]);
   const [persons, setPersons] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,7 +65,7 @@ const Spectacles = () => {
     const isExcel = /\.(xlsx|xls)$/i.test(fileName);
 
     if (!isExcel) {
-      setError('Please upload an Excel file (.xlsx or .xls).');
+      setError(T.dropzoneText);
       return;
     }
 
@@ -79,7 +81,7 @@ const Spectacles = () => {
       });
       await loadSpectacles();
     } catch (err) {
-      setError(err.message || 'Failed to import excel file.');
+      setError(err.message || `${T.errorPrefix}: Excel`);
     } finally {
       setLoading(false);
       setIsDragging(false);
@@ -144,7 +146,7 @@ const Spectacles = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this spectacle?')) {
+    if (window.confirm(T.deleteConfirmSpectacle)) {
       try {
         await spectaclesAPI.delete(id);
         loadSpectacles();
@@ -171,12 +173,12 @@ const Spectacles = () => {
 
   const getPersonName = (personField) => {
     if (personField && typeof personField === 'object') {
-      return `${personField.prenom || ''} ${personField.nom || ''}`.trim() || 'N/A';
+      return `${personField.prenom || ''} ${personField.nom || ''}`.trim() || T.na;
     }
 
     const personId = Number(personField);
     const person = persons.find((p) => p.id === personId);
-    return person ? `${person.prenom} ${person.nom}` : 'N/A';
+    return person ? `${person.prenom} ${person.nom}` : T.na;
   };
 
   const getPersonId = (personField) => {
@@ -195,36 +197,36 @@ const Spectacles = () => {
     e.currentTarget.setAttribute('src', '/main.svg');
   };
 
-  if (loading) return <div className="container"><p>Loading...</p></div>;
+  if (loading) return <div className="container"><p>{T.loading}</p></div>;
 
   return (
     <div className="container">
-      <h1>Spectacles</h1>
+      <h1>{T.spectaclesTitle}</h1>
 
-      {error && <div className="error">Error: {error}</div>}
+      {error && <div className="error">{T.errorPrefix}: {error}</div>}
 
       <div className="controls">
         <button className="connect-btn" onClick={() => setShowForm(true)}>
-          Add Spectacle
+          {T.addSpectacle}
         </button>
         <div className="filter-buttons">
           <button
             className={filter === 'all' ? 'filter-active' : 'filter-btn'}
             onClick={() => setFilter('all')}
           >
-            All
+            {T.filterAll}
           </button>
           <button
             className={filter === 'pending' ? 'filter-active' : 'filter-btn'}
             onClick={() => setFilter('pending')}
           >
-            Pending
+            {T.filterPending}
           </button>
           <button
             className={filter === 'completed' ? 'filter-active' : 'filter-btn'}
             onClick={() => setFilter('completed')}
           >
-            Completed
+            {T.filterCompleted}
           </button>
         </div>
       </div>
@@ -235,18 +237,18 @@ const Spectacles = () => {
         onDragLeave={onDragLeave}
         onDrop={onDrop}
       >
-        <p>Drag and drop Excel file here (.xlsx, .xls)</p>
+        <p>{T.dropzoneText}</p>
         <label className="excel-upload-btn">
-          Choose Excel file
+          {T.chooseExcel}
           <input type="file" accept=".xlsx,.xls" onChange={onFileInputChange} />
         </label>
-        <small>Expected columns: matricule (or mat), date_sortie, date_limite_retour.</small>
+        <small>{T.excelHint}</small>
       </div>
 
       {uploadSummary && (
         <div className="excel-upload-summary">
           <p>
-            Imported <strong>{uploadSummary.fileName}</strong>: created {uploadSummary.createdCount}, errors {uploadSummary.errorCount}
+            {T.importedPrefix} <strong>{uploadSummary.fileName}</strong>: {T.importedCreated} {uploadSummary.createdCount}, {T.importedErrors} {uploadSummary.errorCount}
           </p>
           {uploadSummary.errors.length > 0 && (
             <ul>
@@ -260,16 +262,16 @@ const Spectacles = () => {
 
       {showForm && (
         <div className="form-container">
-          <h2>{editingId ? 'Edit Spectacle' : 'Add Spectacle'}</h2>
+          <h2>{editingId ? T.editSpectacle : T.addSpectacle}</h2>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label>Person:</label>
+              <label>{T.person}:</label>
               <select
                 value={formData.person}
                 onChange={(e) => setFormData({ ...formData, person: e.target.value })}
                 required
               >
-                <option value="">Select Person</option>
+                <option value="">{T.selectPerson}</option>
                 {persons.map((person) => (
                   <option key={person.id} value={person.id}>
                     {person.prenom} {person.nom} - {person.mat}
@@ -278,7 +280,7 @@ const Spectacles = () => {
               </select>
             </div>
             <div className="form-group">
-              <label>Date Sortie:</label>
+              <label>{T.dateSortieLabel}:</label>
               <input
                 type="date"
                 value={formData.date_sortie}
@@ -287,7 +289,7 @@ const Spectacles = () => {
               />
             </div>
             <div className="form-group">
-              <label>Date Limite Retour:</label>
+              <label>{T.dateLimiteLabel}:</label>
               <input
                 type="date"
                 value={formData.date_limite_retour}
@@ -297,10 +299,10 @@ const Spectacles = () => {
             </div>
             <div className="form-actions">
               <button type="submit" className="connect-btn">
-                {editingId ? 'Update' : 'Create'}
+                {editingId ? T.update : T.create}
               </button>
               <button type="button" className="disconnect-btn" onClick={handleCancel}>
-                Cancel
+                {T.cancel}
               </button>
             </div>
           </form>
@@ -322,27 +324,27 @@ const Spectacles = () => {
 
               <div className="person-split-info">
                 <h3>{getPersonName(spectacle.person)}</h3>
-                <p><strong>Sortie:</strong> {spectacle.date_sortie ? new Date(spectacle.date_sortie).toLocaleDateString() : '—'}</p>
-                <p><strong>Limite:</strong> {spectacle.date_limite_retour ? new Date(spectacle.date_limite_retour).toLocaleDateString() : '—'}</p>
-                <p><strong>Rentree:</strong> {spectacle.date_rentree ? new Date(spectacle.date_rentree).toLocaleDateString() : <em>Pending</em>}</p>
+                <p><strong>{T.sortieLabel}:</strong> {spectacle.date_sortie ? new Date(spectacle.date_sortie).toLocaleDateString() : '—'}</p>
+                <p><strong>{T.limiteLabel}:</strong> {spectacle.date_limite_retour ? new Date(spectacle.date_limite_retour).toLocaleDateString() : '—'}</p>
+                <p><strong>{T.rentreeLabel}:</strong> {spectacle.date_rentree ? new Date(spectacle.date_rentree).toLocaleDateString() : <em>{T.pendingBadge}</em>}</p>
                 <p>
                   <span className={isPending ? 'status-badge status-pending' : 'status-badge status-completed'}>
-                    {isPending ? 'Pending' : 'Completed'}
+                    {isPending ? T.pendingBadge : T.completedBadge}
                   </span>
                 </p>
               </div>
 
               <div className="person-split-actions">
                 <button className="btn-edit" onClick={() => handleEdit(spectacle)}>
-                  Edit
+                  {T.edit}
                 </button>
                 {isPending && (
                   <button className="connect-btn" onClick={() => handleMarkReturn(spectacle.id)}>
-                    Mark Returned
+                    {T.markReturned}
                   </button>
                 )}
                 <button className="btn-delete" onClick={() => handleDelete(spectacle.id)}>
-                  Delete
+                  {T.delete}
                 </button>
               </div>
             </article>

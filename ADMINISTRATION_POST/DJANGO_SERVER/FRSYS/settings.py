@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 from pathlib import Path
 import importlib.util
 import os
+from datetime import timedelta
 from dotenv import load_dotenv
 from django.core.exceptions import ImproperlyConfigured
 
@@ -42,33 +43,34 @@ if not ALLOWED_HOSTS and DEBUG:
     ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 
 # CORS settings for React frontend
-CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000').split(',') if origin.strip()]
+CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5173').split(',') if origin.strip()]
 CORS_ALLOW_CREDENTIALS = True
 
 # CSRF settings
-CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv('CSRF_TRUSTED_ORIGINS', 'http://localhost:3000').split(',') if origin.strip()]
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv('CSRF_TRUSTED_ORIGINS', 'http://localhost:3000,http://localhost:5173').split(',') if origin.strip()]
 CSRF_COOKIE_SECURE = env_bool('CSRF_COOKIE_SECURE', False)
 
 
 # Application definition
 
 INSTALLED_APPS = [
-    'daphne',  # Must be first for ASGI support
+    'daphne',  
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'corsheaders',  # CORS headers for React frontend
-    'channels',  # Django Channels for WebSocket
-    'server',    # Face Recognition server app
-    'rest_framework',  # Django REST Framework for API endpoints
-    'django_filters',  # Django Filter for REST API filtering
+    'corsheaders',  
+    'channels', 
+    'server',   
+    'rest_framework',  
+    'django_filters',  
+    'rest_framework_simplejwt.token_blacklist',
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # Must be before CommonMiddleware
+    'corsheaders.middleware.CorsMiddleware', 
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -102,11 +104,11 @@ ASGI_APPLICATION = 'FRSYS.routing.application'
 
 # Channel Layers for Django Channels
 # Default to in-memory for local development so app runs without Redis.
-# CHANNEL_LAYERS = {
-#     'default': {
-#         'BACKEND': 'channels.layers.InMemoryChannelLayer'
-#     }
-# }
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer'
+    }
+}
 
 # Enable Redis layer only when explicitly requested and package is available.
 if os.getenv('USE_REDIS_CHANNEL_LAYER', '0') == '1':
@@ -188,6 +190,12 @@ CORS_ALLOW_ALL_ORIGINS = env_bool('CORS_ALLOW_ALL_ORIGINS', False)
 
 # Django REST Framework settings
 REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'server.authentication.CookieJWTAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 50,
     'DEFAULT_FILTER_BACKENDS': [
@@ -204,4 +212,44 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.FormParser',
         'rest_framework.parsers.MultiPartParser',
     ],
+}
+
+AUTH_COOKIE_SECURE = env_bool('AUTH_COOKIE_SECURE', False)
+AUTH_COOKIE_SAMESITE = os.getenv('AUTH_COOKIE_SAMESITE', 'Lax').strip() or 'Lax'
+AUTH_COOKIE_DOMAIN = os.getenv('AUTH_COOKIE_DOMAIN', '').strip() or None
+AUTH_ACCESS_COOKIE_AGE = int(os.getenv('AUTH_ACCESS_COOKIE_AGE', '900'))
+AUTH_REFRESH_COOKIE_AGE = int(os.getenv('AUTH_REFRESH_COOKIE_AGE', '604800'))
+CAMERA_CREDENTIALS_KEY = os.getenv('CAMERA_CREDENTIALS_KEY', '').strip()
+
+AUTH_LOGIN_MAX_ATTEMPTS = int(os.getenv('AUTH_LOGIN_MAX_ATTEMPTS', '5'))
+AUTH_LOGIN_LOCK_MINUTES = int(os.getenv('AUTH_LOGIN_LOCK_MINUTES', '15'))
+
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_REFERRER_POLICY = 'same-origin'
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+    'UPDATE_LAST_LOGIN': True,
+}
+
+REST_FRAMEWORK['DEFAULT_THROTTLE_CLASSES'] = [
+    'rest_framework.throttling.AnonRateThrottle',
+    'rest_framework.throttling.UserRateThrottle',
+    'rest_framework.throttling.ScopedRateThrottle',
+]
+
+REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {
+    'anon': os.getenv('THROTTLE_ANON', '120/hour').strip(),
+    'user': os.getenv('THROTTLE_USER', '1500/hour').strip(),
+    'auth_login': os.getenv('THROTTLE_AUTH_LOGIN', '20/hour').strip(),
+    'auth_refresh': os.getenv('THROTTLE_AUTH_REFRESH', '60/hour').strip(),
+    'auth_register': os.getenv('THROTTLE_AUTH_REGISTER', '25/hour').strip(),
+    'auth_grant_token': os.getenv('THROTTLE_AUTH_GRANT_TOKEN', '50/hour').strip(),
+    'auth_role_grant': os.getenv('THROTTLE_AUTH_ROLE_GRANT', '80/hour').strip(),
+    'auth_guest_manage': os.getenv('THROTTLE_AUTH_GUEST_MANAGE', '200/hour').strip(),
 }

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Face Recognition System - User Manual</title>
+  <style>
+    body {
+      font-family: Segoe UI, Arial, sans-serif;
+      margin: 34px;
+      color: #1f2937;
+      line-height: 1.45;
+    }
+    h1, h2, h3 { color: #0f172a; margin-top: 20px; }
+    h1 { font-size: 28px; margin-bottom: 6px; }
+    h2 { font-size: 20px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+    h3 { font-size: 16px; }
+    p, li { font-size: 13px; }
+    .meta { color: #4b5563; margin-bottom: 14px; }
+    code, pre {
+      font-family: Consolas, "Courier New", monospace;
+      background: #f3f4f6;
+    }
+    pre {
+      padding: 10px;
+      border: 1px solid #e5e7eb;
+      white-space: pre-wrap;
+    }
+    .note {
+      background: #eff6ff;
+      border-left: 4px solid #2563eb;
+      padding: 10px;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Face Recognition System - User Manual</h1>
+  <p class="meta">Version: 1.0.1 | Date: 2026-03-12</p>
+
+  <h2>1. Purpose</h2>
+  <p>This manual explains operation of the distributed Face Recognition System, including architecture, roles, real-time behavior, security controls, and troubleshooting.</p>
+
+  <h2>2. System Architecture</h2>
+  <p>The solution uses a client-server architecture with centralized backend services and distributed surveillance clients.</p>
+
+  <h3>2.1 Components</h3>
+  <ul>
+    <li>Surveillance Post PC(s): React frontend used by operators.</li>
+    <li>Administration Post PC: Django API, WebSocket gateway, PostgreSQL, and model server.</li>
+    <li>Model Server: Face recognition processing service.</li>
+  </ul>
+
+  <h3>2.2 Data and Control Flow</h3>
+  <ol>
+    <li>Frontend user authenticates through Django.</li>
+    <li>Django stores JWT access/refresh tokens in HTTP-only cookies.</li>
+    <li>REST requests use cookie credentials and CSRF protection.</li>
+    <li>WebSocket authentication uses JWT cookies.</li>
+    <li>Guest presence socket updates online state.</li>
+    <li>Admin notification socket receives guest connect/disconnect events.</li>
+    <li>Video stream consumer sends frame and detection payloads in real time.</li>
+  </ol>
+
+  <h3>2.3 Logical Diagram</h3>
+  <pre>SURVEILLANCE POST(S)
+  React Client (UI, AuthContext, LangContext)
+      | HTTP + WebSocket
+      v
+ADMINISTRATION POST
+  Django + DRF + Channels (port 8000)
+      |-- PostgreSQL (records, users, roles, presence)
+      |-- Model Server (face recognition service)
+  </pre>
+
+  <h3>2.4 Current Code Anchors</h3>
+  <ul>
+    <li><code>ADMINISTRATION_POST/DJANGO_SERVER/server/auth_views.py</code>: auth, role and guest management endpoints.</li>
+    <li><code>ADMINISTRATION_POST/DJANGO_SERVER/server/urls.py</code>: REST route map.</li>
+    <li><code>ADMINISTRATION_POST/DJANGO_SERVER/server/routing.py</code>: WebSocket route map.</li>
+    <li><code>ADMINISTRATION_POST/DJANGO_SERVER/server/consumers.py</code>: stream and notification consumers.</li>
+    <li><code>SURVEILLANCE_POST/REACT_CLIENT/src/services/api.js</code>: API/CSRF client behavior.</li>
+    <li><code>SURVEILLANCE_POST/REACT_CLIENT/src/context/AuthContext.jsx</code>: frontend auth state and guest presence socket lifecycle.</li>
+  </ul>
+
+  <h2>3. Roles and Permissions</h2>
+  <h3>3.1 Admin</h3>
+  <ul>
+    <li>Full access to management pages and dashboards.</li>
+    <li>Can create grant tokens, assign roles, and manage guest accounts.</li>
+    <li>Receives real-time guest presence notifications.</li>
+  </ul>
+
+  <h3>3.2 Guest</h3>
+  <ul>
+    <li>Limited application routes only.</li>
+    <li>Can use operational pages allowed by policy.</li>
+    <li>Sends presence heartbeat over WebSocket while connected.</li>
+  </ul>
+
+  <h2>4. Authentication and Security</h2>
+  <ul>
+    <li>JWT access/refresh in HTTP-only cookies.</li>
+    <li>Refresh rotation + blacklist support.</li>
+    <li>CSRF bootstrap endpoint and request header injection for unsafe methods.</li>
+    <li>Login lockout and DRF throttle scopes for abuse resistance.</li>
+    <li>Camera passwords encrypted at rest.</li>
+  </ul>
+
+  <h2>5. API and WebSocket Endpoints</h2>
+  <h3>5.1 Auth APIs</h3>
+  <p><code>GET /api/auth/csrf/</code>, <code>POST /api/auth/login/</code>, <code>POST /api/auth/logout/</code>, <code>POST /api/auth/refresh/</code>, <code>GET /api/auth/me/</code>, <code>POST /api/auth/grant-token/</code>, <code>POST /api/auth/register-with-token/</code>, <code>POST /api/auth/grant-role/</code>, <code>GET/POST /api/auth/guests/</code>, <code>PATCH/DELETE /api/auth/guests/{user_id}/</code></p>
+
+  <h3>5.2 Main APIs</h3>
+  <p><code>/api/compagnies/</code>, <code>/api/persons/</code>, <code>/api/cameras/</code>, <code>/api/spectacles/</code>, <code>/api/rentrees/</code>, <code>/api/status/</code></p>
+
+  <h3>5.3 WebSocket Endpoints</h3>
+  <p><code>/ws/video/stream/</code>, <code>/ws/face/recognize/</code>, <code>/ws/presence/guest/</code>, <code>/ws/admin/notifications/</code></p>
+
+  <h2>6. Daily Operations</h2>
+  <ol>
+    <li>Start administration services from <code>ADMINISTRATION_POST/START_ADMIN_SERVICES.ps1</code>.</li>
+    <li>Start surveillance client from <code>SURVEILLANCE_POST/START_SURVEILLANCE_CLIENT.ps1</code>.</li>
+    <li>Admin logs in, opens Access Control, provisions users, and monitors guest presence.</li>
+    <li>Guest logs in and uses allowed operational routes.</li>
+    <li>Use logout before ending a shift.</li>
+  </ol>
+
+  <h2>7. Important Configuration Notes</h2>
+  <p>Backend production settings are controlled in <code>ADMINISTRATION_POST/DJANGO_SERVER/.env</code> (hosts, CORS, CSRF trusted origins, JWT cookie settings, lockout/throttles).</p>
+  <div class="note">
+    Current frontend API base is <code>http://localhost:8000/api</code> in <code>src/services/api.js</code>. For distributed deployment, set API/WS base URLs to the administration post IP.
+  </div>
+
+  <h2>8. Troubleshooting</h2>
+  <ul>
+    <li>Login lockout: wait for lock duration or clear cache according to admin procedure.</li>
+    <li>Guest online state missing: verify <code>/ws/presence/guest/</code> connectivity.</li>
+    <li>No admin notifications: verify <code>/ws/admin/notifications/</code> connectivity and role.</li>
+    <li>Frontend API errors: check firewall, admin host reachability, CORS and CSRF trusted origins.</li>
+  </ul>
+
+  <h2>9. Localization</h2>
+  <p>The UI supports English and Arabic using <code>LangContext</code>. The language toggle affects user-facing labels and status text.</p>
+
+</body>
+</html>

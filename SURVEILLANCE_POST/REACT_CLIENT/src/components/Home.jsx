@@ -1,8 +1,91 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLang } from '../context/LangContext';
+import { useAuth } from '../context/AuthContext';
 import '../styles/Common.css';
+import { GuestMiniCard } from './GuestMiniCard';
 
 const Home = () => {
   const { T } = useLang();
+  const { role } = useAuth();
+  const [onlineGuests, setOnlineGuests] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [socketState, setSocketState] = useState('disconnected');
+  const wsRef = useRef(null);
+
+  const notificationCount = useMemo(() => notifications.length, [notifications]);
+  const getSocketLabel = (state) => {
+    if (state === 'connected') return T.connected;
+    if (state === 'connecting') return T.connecting;
+    if (state === 'disconnected') return T.disconnected;
+    return state;
+  };
+
+  useEffect(() => {
+    if (role !== 'admin') {
+      return undefined;
+    }
+
+    setSocketState('connecting');
+    const ws = new WebSocket('ws://localhost:8000/ws/admin/notifications/');
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setSocketState('connected');
+      ws.send(JSON.stringify({ type: 'ping' }));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type !== 'admin_notification') return;
+
+        if (data.event === 'guest_snapshot') {
+          setOnlineGuests(data.payload?.online_guests || []);
+          return;
+        }
+
+        if (data.event === 'guest_online' || data.event === 'guest_offline') {
+          const payload = data.payload || {};
+          setNotifications((prev) => [
+            {
+              id: `${payload.user_id}-${Date.now()}`,
+              event: data.event,
+              username: payload.username,
+              at: new Date().toLocaleTimeString(),
+            },
+            ...prev,
+          ].slice(0, 12));
+
+          setOnlineGuests((prev) => {
+            const withoutUser = prev.filter((guest) => guest.user_id !== payload.user_id);
+            if (data.event === 'guest_online') {
+              return [...withoutUser, payload].sort((a, b) => a.username.localeCompare(b.username));
+            }
+            return withoutUser;
+          });
+        }
+      } catch {
+        // Ignore malformed payloads
+      }
+    };
+
+    ws.onerror = () => {
+      setSocketState('error');
+    };
+
+    ws.onclose = () => {
+      setSocketState('disconnected');
+      wsRef.current = null;
+    };
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, [role]);
+
   return (
     <div className="container">
       <h1>{T.homeTitle}</h1>
@@ -10,6 +93,45 @@ const Home = () => {
         <p style={{ fontSize: '18px', color: '#666', marginBottom: '30px' }}>
           {T.homeWelcome}
         </p>
+
+        {role === 'admin' && (
+          <div style={{ margin: '0 0 24px', textAlign: 'left' }}>
+            <div className={`status ${socketState}`} style={{ marginBottom: 10 }}>
+              {T.guestNotificationSocket}: {getSocketLabel(socketState)}
+            </div>
+            <div className="form-container" style={{ marginBottom: 16 }}>
+              <h2 style={{ marginTop: 0 }}>{T.guestsOnline} ({onlineGuests.length})</h2>
+              {onlineGuests.length === 0 ? (
+                <p>{T.noGuestsOnline}</p>
+              ) : (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: 8 }}>
+                  {onlineGuests.map((guest) => (
+                    <GuestMiniCard
+                      key={guest.user_id}
+                      username={guest.username}
+                      is_online={true}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="form-container">
+              <h2 style={{ marginTop: 0 }}>{T.guestNotifications} ({notificationCount})</h2>
+              {notifications.length === 0 ? (
+                <p>{T.noGuestActivity}</p>
+              ) : (
+                <div className="detections-list">
+                  {notifications.map((note) => (
+                    <div key={note.id} className="detection-item">
+                      <strong>{note.username}</strong> {note.event === 'guest_online' ? T.guestConnectedAt : T.guestDisconnectedAt} {note.at}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginTop: '40px' }}>
           <div className="feature-card">
             <h3>{T.homeVideoStream}</h3>

@@ -6,6 +6,7 @@ from django.http import FileResponse
 from django.conf import settings
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 import os
@@ -19,6 +20,7 @@ from .serializers import (
     SpectacleSerializer, 
     RentreeSerializer
 )
+from .permissions import IsAdminOrGuestReadOnly, IsAdminRole
 
 
 def video_stream_view(request):
@@ -62,6 +64,7 @@ class CompagnieViewSet(viewsets.ModelViewSet):
     """
     queryset = Compagnie.objects.all()
     serializer_class = CompagnieSerializer
+    permission_classes = [IsAuthenticated, IsAdminRole]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['label']
     ordering_fields = ['id', 'label']
@@ -104,6 +107,7 @@ class PersonViewSet(viewsets.ModelViewSet):
     """
     queryset = Person.objects.select_related('compagnie')
     serializer_class = PersonSerializer
+    permission_classes = [IsAuthenticated, IsAdminRole]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['compagnie', 'mat']
     search_fields = ['nom', 'prenom', 'mat']
@@ -203,6 +207,7 @@ class CameraViewSet(viewsets.ModelViewSet):
     """
     queryset = Camera.objects.all()
     serializer_class = CameraSerializer
+    permission_classes = [IsAuthenticated, IsAdminRole]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['is_active']
     search_fields = ['model_name', 'ip_address']
@@ -268,7 +273,7 @@ class CameraViewSet(viewsets.ModelViewSet):
 def _build_rtsp_url(camera):
     """Build the RTSP URL from Camera model fields."""
     user = camera.username or ''
-    pwd = camera.password or ''
+    pwd = camera.get_camera_password() or ''
     ip = camera.ip_address or ''
     port = camera.rtsp_port or 554
     path = camera.rtsp_path or '/stream'
@@ -328,6 +333,7 @@ class SpectacleViewSet(viewsets.ModelViewSet):
     """
     queryset = Spectacle.objects.select_related('person__compagnie')
     serializer_class = SpectacleSerializer
+    permission_classes = [IsAuthenticated, IsAdminRole]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['person', 'date_sortie']
     ordering_fields = ['id', 'date_sortie', 'date_rentree', 'date_limite_retour']
@@ -534,6 +540,7 @@ class RentreeViewSet(viewsets.ModelViewSet):
         'spectacle__person__compagnie'
     )
     serializer_class = RentreeSerializer
+    permission_classes = [IsAuthenticated, IsAdminOrGuestReadOnly]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['person', 'spectacle', 'est_retard']
     ordering_fields = ['id', 'date_rentree', 'est_retard']

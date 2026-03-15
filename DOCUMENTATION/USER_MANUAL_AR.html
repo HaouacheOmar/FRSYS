@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>دليل المستخدم - نظام التعرف على الوجه</title>
+  <style>
+    body {
+      font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+      margin: 34px;
+      color: #1f2937;
+      line-height: 1.6;
+      direction: rtl;
+      text-align: right;
+    }
+    h1, h2, h3 { color: #0f172a; }
+    h1 { font-size: 28px; margin-bottom: 6px; }
+    h2 { font-size: 20px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin-top: 20px; }
+    h3 { font-size: 16px; margin-top: 14px; }
+    p, li { font-size: 13px; }
+    .meta { color: #4b5563; margin-bottom: 14px; }
+    code, pre {
+      font-family: Consolas, "Courier New", monospace;
+      background: #f3f4f6;
+      direction: ltr;
+      unicode-bidi: embed;
+    }
+    pre {
+      padding: 10px;
+      border: 1px solid #e5e7eb;
+      white-space: pre-wrap;
+    }
+    .note {
+      background: #eff6ff;
+      border-right: 4px solid #2563eb;
+      padding: 10px;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>دليل المستخدم - نظام التعرف على الوجه</h1>
+  <p class="meta">الإصدار: 1.0.1 | التاريخ: 2026-03-12</p>
+
+  <h2>1. الهدف</h2>
+  <p>هذا الدليل يوضح تشغيل النظام واستخدامه اليومي، مع شرح البنية المعمارية، الأدوار، الأمان، والإشعارات الفورية.</p>
+
+  <h2>2. شرح البنية المعمارية</h2>
+  <p>النظام يعمل بنموذج عميل/خادم (Client-Server) حيث توجد خدمات الخلفية في جهاز الإدارة، بينما تعمل الواجهة على أجهزة نقاط المراقبة.</p>
+
+  <h3>2.1 المكونات</h3>
+  <ul>
+    <li>نقاط المراقبة: واجهة React للمشغلين.</li>
+    <li>مركز الإدارة: Django API + Channels + PostgreSQL + Model Server.</li>
+    <li>Model Server: خدمة معالجة التعرف على الوجه.</li>
+  </ul>
+
+  <h3>2.2 تدفق العمل</h3>
+  <ol>
+    <li>المستخدم يسجل الدخول من الواجهة.</li>
+    <li>الخادم ينشئ JWT داخل Cookies من نوع HTTP-only.</li>
+    <li>الطلبات REST تستخدم Cookies وCSRF header.</li>
+    <li>WebSocket يعتمد على JWT من Cookies للمصادقة.</li>
+    <li>Socket حضور الضيف يحدّث حالة الاتصال.</li>
+    <li>Socket إشعارات المدير يستقبل التحديثات المباشرة.</li>
+  </ol>
+
+  <h3>2.3 مخطط منطقي</h3>
+  <pre>نقاط المراقبة
+  React Client
+      | HTTP + WebSocket
+      v
+مركز الإدارة
+  Django + DRF + Channels (8000)
+      |-- PostgreSQL
+      |-- Model Server
+  </pre>
+
+  <h3>2.4 ملفات مرجعية في الكود</h3>
+  <ul>
+    <li><code>ADMINISTRATION_POST/DJANGO_SERVER/server/auth_views.py</code></li>
+    <li><code>ADMINISTRATION_POST/DJANGO_SERVER/server/urls.py</code></li>
+    <li><code>ADMINISTRATION_POST/DJANGO_SERVER/server/routing.py</code></li>
+    <li><code>ADMINISTRATION_POST/DJANGO_SERVER/server/consumers.py</code></li>
+    <li><code>SURVEILLANCE_POST/REACT_CLIENT/src/services/api.js</code></li>
+    <li><code>SURVEILLANCE_POST/REACT_CLIENT/src/context/AuthContext.jsx</code></li>
+  </ul>
+
+  <h2>3. الأدوار</h2>
+  <h3>3.1 المدير (admin)</h3>
+  <ul>
+    <li>إدارة كاملة للنظام.</li>
+    <li>إنشاء رموز Grant وإدارة حسابات الضيوف.</li>
+    <li>استقبال إشعارات اتصال الضيوف لحظيًا.</li>
+  </ul>
+
+  <h3>3.2 الضيف (guest)</h3>
+  <ul>
+    <li>وصول محدود للمسارات المسموح بها.</li>
+    <li>إرسال حالة الحضور أثناء الجلسة.</li>
+  </ul>
+
+  <h2>4. الأمان والمصادقة</h2>
+  <ul>
+    <li>JWT داخل HTTP-only Cookies.</li>
+    <li>Refresh rotation + blacklist.</li>
+    <li>CSRF endpoint + X-CSRFToken للطلبات غير الآمنة.</li>
+    <li>Lockout لمحاولات الدخول الفاشلة + Throttling.</li>
+    <li>تشفير كلمات مرور الكاميرات في قاعدة البيانات.</li>
+  </ul>
+
+  <h2>5. نقاط الربط الأساسية</h2>
+  <p><code>/api/auth/login/</code>، <code>/api/auth/refresh/</code>، <code>/api/auth/guests/</code>، <code>/ws/presence/guest/</code>، <code>/ws/admin/notifications/</code>، <code>/ws/video/stream/</code></p>
+
+  <h2>6. التشغيل اليومي</h2>
+  <ol>
+    <li>تشغيل خدمات الإدارة من <code>ADMINISTRATION_POST/START_ADMIN_SERVICES.ps1</code>.</li>
+    <li>تشغيل عميل المراقبة من <code>SURVEILLANCE_POST/START_SURVEILLANCE_CLIENT.ps1</code>.</li>
+    <li>تسجيل دخول المدير لإدارة الحسابات ومراقبة الحالة.</li>
+    <li>تسجيل دخول الضيف للعمل على المسارات المسموح بها.</li>
+  </ol>
+
+  <h2>7. ملاحظات إعداد</h2>
+  <p>إعدادات الإنتاج الخلفية موجودة في <code>ADMINISTRATION_POST/DJANGO_SERVER/.env</code>.</p>
+  <div class="note">
+    الواجهة تستخدم حاليًا <code>http://localhost:8000/api</code> في <code>api.js</code>. للنشر الشبكي يجب ضبط عنوان جهاز الإدارة.
+  </div>
+
+  <h2>8. استكشاف الأعطال</h2>
+  <ul>
+    <li>فشل الدخول: تحقق من البيانات أو انتظر انتهاء مدة القفل.</li>
+    <li>غياب حالة Online: افحص اتصال <code>/ws/presence/guest/</code>.</li>
+    <li>غياب إشعارات المدير: افحص اتصال <code>/ws/admin/notifications/</code> ودور الحساب.</li>
+    <li>فشل API: تحقق من IP، المنفذ 8000، وإعدادات CORS/CSRF.</li>
+  </ul>
+
+</body>
+</html>
