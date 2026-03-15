@@ -1,5 +1,11 @@
+import hashlib
+
+from django.conf import settings
 from django.db import models
 from django.db.models import F, Q
+from django.utils import timezone
+
+from .crypto import decrypt_text, encrypt_text
 
 # Create your models here.
 
@@ -47,13 +53,19 @@ class Camera(models.Model):
     # tells if this camera is enabled
     is_active = models.BooleanField(default=True, db_index=True)
     username = models.CharField(max_length=150, null=True, blank=True)
-    password = models.CharField(max_length=150, null=True, blank=True)
+    password = models.CharField(max_length=512, null=True, blank=True)
     # RTSP stream port (default 554) and stream path
     rtsp_port = models.PositiveIntegerField(default=554)
     rtsp_path = models.CharField(max_length=500, default='/stream', blank=True)
 
     def __str__(self):
         return f"{self.model_name} - {self.ip_address}"
+
+    def set_camera_password(self, raw_password):
+        self.password = encrypt_text(raw_password or "")
+
+    def get_camera_password(self):
+        return decrypt_text(self.password or "")
 
 # outing record table
 class Spectacle(models.Model):
@@ -105,3 +117,72 @@ class Rentree(models.Model):
             models.Index(fields=["est_retard", "date_rentree"], name="idx_rent_late_date"),
             models.Index(fields=["person", "date_rentree"], name="idx_rent_person_date"),
         ]
+
+
+class UserRole(models.Model):
+    ROLE_ADMIN = "admin"
+    ROLE_GUEST = "guest"
+    ROLE_CHOICES = [
+        (ROLE_ADMIN, "Admin"),
+        (ROLE_GUEST, "Guest"),
+    ]
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="user_role")
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default=ROLE_GUEST, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.username}: {self.role}"
+
+
+class AccessGrantToken(models.Model):
+    ROLE_ADMIN = UserRole.ROLE_ADMIN
+    ROLE_GUEST = UserRole.ROLE_GUEST
+    ROLE_CHOICES = UserRole.ROLE_CHOICES
+
+    label = models.CharField(max_length=120)
+    token_hash = models.CharField(max_length=64, unique=True)
+    role_to_grant = models.CharField(max_length=20, choices=ROLE_CHOICES, default=ROLE_GUEST)
+    max_uses = models.PositiveIntegerField(default=1)
+    uses_count = models.PositiveIntegerField(default=0)
+    expires_at = models.DateTimeField()
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="issued_access_grant_tokens",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["is_active", "expires_at"], name="idx_grant_active_exp"),
+            models.Index(fields=["role_to_grant", "created_at"], name="idx_grant_role_created"),
+        ]
+
+    def __str__(self):
+        return f"{self.label} ({self.role_to_grant})"
+
+    @staticmethod
+    def hash_token(raw_token):
+        return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+    @property
+    def is_usable(self):
+        return self.is_active and self.uses_count < self.max_uses and self.expires_at > timezone.now()
+
+
+class GuestPresence(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="guest_presence")
+    is_online = models.BooleanField(default=False, db_index=True)
+    connection_count = models.PositiveIntegerField(default=0)
+    last_seen = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["user__username"]
+
+    def __str__(self):
+        state = "online" if self.is_online else "offline"
+        return f"{self.user.username}: {state} ({self.connection_count})"

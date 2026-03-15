@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { rentreesAPI, API_BASE_URL } from '../services/api';
+import { useLang } from '../context/LangContext';
 
 const Rentrees = () => {
+  const { T } = useLang();
   const [rentrees, setRentrees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -12,6 +14,12 @@ const Rentrees = () => {
   const refreshLockRef = useRef(false);
 
   const WS_URL = 'ws://localhost:8000/ws/video/stream/';
+  const getSocketLabel = (state) => {
+    if (state === 'connected') return T.connected;
+    if (state === 'connecting') return T.connecting;
+    if (state === 'disconnected') return T.disconnected;
+    return state;
+  };
 
   useEffect(() => {
     loadRentrees();
@@ -85,7 +93,7 @@ const Rentrees = () => {
     };
 
     ws.onerror = () => {
-      setError('Camera websocket error');
+      setError(T.socketError);
     };
 
     ws.onclose = () => {
@@ -107,9 +115,9 @@ const Rentrees = () => {
 
   const getPersonInfo = (rentree) => {
     const person = rentree?.spectacle?.person;
-    if (!person) return { name: 'Unknown', id: null };
+    if (!person) return { name: T.unknown, id: null };
     return {
-      name: `${person.prenom || ''} ${person.nom || ''}`.trim() || 'Unknown',
+      name: `${person.prenom || ''} ${person.nom || ''}`.trim() || T.unknown,
       id: person.id ?? null,
     };
   };
@@ -127,51 +135,51 @@ const Rentrees = () => {
 
   const getSpectacleInfo = (rentree) => {
     const spectacle = rentree?.spectacle;
-    if (!spectacle) return 'N/A';
+    if (!spectacle) return T.na;
 
     const person = spectacle.person;
-    const personName = person ? `${person.prenom} ${person.nom}` : 'Unknown';
+    const personName = person ? `${person.prenom} ${person.nom}` : T.unknown;
     return `${personName} - ${spectacle.date_sortie}`;
   };
 
-  if (loading) return <div className="container"><p>Loading...</p></div>;
+  if (loading) return <div className="container"><p>{T.loading}</p></div>;
 
   return (
     <div className="container">
-      <h1>Rentrees (Returns)</h1>
+      <h1>{T.rentreesTitle}</h1>
 
-      {error && <div className="error">Error: {error}</div>}
+      {error && <div className="error">{T.errorPrefix}: {error}</div>}
 
       <div className={`status ${wsState}`}>
-        Camera: {wsState}
+        {T.cameraStatus}: {getSocketLabel(wsState)}
       </div>
 
       <div className="controls">
         <button className="connect-btn" onClick={connectCamera}>
-          Start Camera Recognition
+          {T.startCameraRecognition}
         </button>
         <button className="disconnect-btn" onClick={disconnectCamera}>
-          Stop Camera Recognition
+          {T.stopCameraRecognition}
         </button>
         <div className="filter-buttons">
           <button
             className={!showLateOnly ? 'filter-active' : 'filter-btn'}
             onClick={() => setShowLateOnly(false)}
           >
-            All Returns
+            {T.allReturns}
           </button>
           <button
             className={showLateOnly ? 'filter-active' : 'filter-btn'}
             onClick={() => setShowLateOnly(true)}
           >
-            Late Returns Only
+            {T.lateReturnsOnly}
           </button>
         </div>
       </div>
 
       {cameraEvents.length > 0 && (
         <div className="detections">
-          <h3>Recent Camera Return Events</h3>
+          <h3>{T.recentEvents}</h3>
           <div className="detections-list">
             {cameraEvents.map((evt) => (
               <div key={evt.id} className="detection-item">
@@ -199,11 +207,11 @@ const Rentrees = () => {
 
               <div className="person-split-info">
                 <h3>{name}</h3>
-                <p><strong>Sortie:</strong> {dateSortie ? new Date(dateSortie).toLocaleDateString() : '—'}</p>
-                <p><strong>Rentree:</strong> {rentree.date_rentree ? new Date(rentree.date_rentree).toLocaleDateString() : '—'}</p>
+                <p><strong>{T.sortieLabel}:</strong> {dateSortie ? new Date(dateSortie).toLocaleDateString() : '—'}</p>
+                <p><strong>{T.rentreeLabel}:</strong> {rentree.date_rentree ? new Date(rentree.date_rentree).toLocaleDateString() : '—'}</p>
                 <p>
                   <span className={`status-badge ${isLate ? 'status-pending' : 'status-completed'}`}>
-                    {isLate ? 'Late' : 'On Time'}
+                    {isLate ? T.lateLabel : T.onTimeLabel}
                   </span>
                 </p>
               </div>

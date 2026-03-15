@@ -10,8 +10,17 @@ import base64
 import cv2
 import numpy as np
 from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.db import database_sync_to_async
 
 from .services.Stream import VideoStreamProcessor, RTSP_URL, PROCESS_SCALE, DISPLAY_FPS, IDLE_SLEEP_SEC
+from .auth_utils import get_user_role
+from .models import UserRole
+from .presence import (
+    ADMIN_NOTIFICATIONS_GROUP,
+    list_online_guests,
+    mark_guest_connected,
+    mark_guest_disconnected,
+)
 
 
 class VideoStreamConsumer(AsyncWebsocketConsumer):
@@ -43,6 +52,11 @@ class VideoStreamConsumer(AsyncWebsocketConsumer):
     
     async def connect(self):
         """Handle new WebSocket connection."""
+        role = await database_sync_to_async(get_user_role)(self.scope.get('user'))
+        if role not in {UserRole.ROLE_ADMIN, UserRole.ROLE_GUEST}:
+            await self.close(code=4403)
+            return
+
         await self.accept()
         VideoStreamConsumer.connected_clients.add(self)
         
@@ -357,6 +371,11 @@ class FaceRecognitionConsumer(AsyncWebsocketConsumer):
     
     async def connect(self):
         """Handle new WebSocket connection."""
+        role = await database_sync_to_async(get_user_role)(self.scope.get('user'))
+        if role not in {UserRole.ROLE_ADMIN, UserRole.ROLE_GUEST}:
+            await self.close(code=4403)
+            return
+
         await self.accept()
         await self._send_json('connection', message='Connected to face recognition service')
     
@@ -416,3 +435,78 @@ class FaceRecognitionConsumer(AsyncWebsocketConsumer):
     async def _send_json(self, msg_type, **kwargs):
         """Helper to send JSON responses."""
         await self.send(text_data=json.dumps({'type': msg_type, **kwargs}))
+
+
+class GuestPresenceConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        role = await database_sync_to_async(get_user_role)(self.scope.get('user'))
+        if role != UserRole.ROLE_GUEST:
+            await self.close(code=4403)
+            return
+
+        await self.accept()
+        await database_sync_to_async(mark_guest_connected)(self.scope['user'])
+        await self.send(text_data=json.dumps({'type': 'presence', 'status': 'connected'}))
+
+    async def disconnect(self, close_code):
+        user = self.scope.get('user')
+        role = await database_sync_to_async(get_user_role)(user)
+        if role == UserRole.ROLE_GUEST:
+            await database_sync_to_async(mark_guest_disconnected)(user)
+
+    async def receive(self, text_data):
+        try:
+            payload = json.loads(text_data)
+        except Exception:
+            return
+
+        if payload.get('type') == 'ping':
+            await self.send(text_data=json.dumps({'type': 'pong'}))
+
+
+class AdminNotificationConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        role = await database_sync_to_async(get_user_role)(self.scope.get('user'))
+        if role != UserRole.ROLE_ADMIN:
+            await self.close(code=4403)
+            return
+
+        await self.accept()
+        await self.channel_layer.group_add(ADMIN_NOTIFICATIONS_GROUP, self.channel_name)
+
+        online_guests = await database_sync_to_async(list_online_guests)()
+        await self.send(
+            text_data=json.dumps(
+                {
+                    'type': 'admin_notification',
+                    'event': 'guest_snapshot',
+                    'payload': {'online_guests': online_guests},
+                }
+            )
+        )
+
+    async def disconnect(self, close_code):
+        try:
+            await self.channel_layer.group_discard(ADMIN_NOTIFICATIONS_GROUP, self.channel_name)
+        except Exception:
+            pass
+
+    async def receive(self, text_data):
+        try:
+            payload = json.loads(text_data)
+        except Exception:
+            return
+
+        if payload.get('type') == 'ping':
+            await self.send(text_data=json.dumps({'type': 'pong'}))
+
+    async def admin_notification(self, event):
+        await self.send(
+            text_data=json.dumps(
+                {
+                    'type': 'admin_notification',
+                    'event': event.get('event'),
+                    'payload': event.get('payload', {}),
+                }
+            )
+        )

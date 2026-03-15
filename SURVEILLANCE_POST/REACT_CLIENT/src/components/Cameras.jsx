@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { camerasAPI } from '../services/api';
+import { useLang } from '../context/LangContext';
 import camSvg from '../assets/surveillance_cam.svg';
 
 const Cameras = () => {
+  const { T } = useLang();
   const [cameras, setCameras] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -96,7 +98,7 @@ const Cameras = () => {
       ip_address: camera.ip_address || '',
       model_name: camera.model_name || '',
       username: camera.username || '',
-      password: camera.password || '',
+      password: '',
       rtsp_port: camera.rtsp_port ?? 554,
       rtsp_path: camera.rtsp_path || '/stream',
     });
@@ -105,7 +107,7 @@ const Cameras = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this camera?')) {
+    if (window.confirm(T.deleteConfirmCamera)) {
       try {
         await camerasAPI.delete(id);
         loadCameras();
@@ -134,29 +136,29 @@ const Cameras = () => {
     setEditingId(null);
   };
 
-  if (loading) return <div className="container"><p>Loading...</p></div>;
+  if (loading) return <div className="container"><p>{T.loading}</p></div>;
 
   return (
     <div className="container">
-      <h1>Cameras</h1>
+      <h1>{T.camerasTitle}</h1>
 
-      {error && <div className="error">Error: {error}</div>}
+      {error && <div className="error">{T.errorPrefix}: {error}</div>}
 
       <div className="controls">
         <button className="connect-btn" onClick={() => setShowForm(true)}>
-          Add Camera
+          {T.addCamera}
         </button>
         <button className="btn-edit" onClick={() => probeAll()} style={{ marginLeft: 10 }}>
-          Check Streams Now
+          {T.checkStreams}
         </button>
       </div>
 
       {showForm && (
         <div className="form-container">
-          <h2>{editingId ? 'Edit Camera' : 'Add Camera'}</h2>
+          <h2>{editingId ? T.editCamera : T.addCamera}</h2>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label>IP Address:</label>
+              <label>{T.ipAddress}:</label>
               <input
                 type="text"
                 value={formData.ip_address}
@@ -166,7 +168,7 @@ const Cameras = () => {
               />
             </div>
             <div className="form-group">
-              <label>Model Name:</label>
+              <label>{T.modelName}:</label>
               <input
                 type="text"
                 value={formData.model_name}
@@ -176,7 +178,7 @@ const Cameras = () => {
               />
             </div>
             <div className="form-group">
-              <label>Username:</label>
+              <label>{T.username}:</label>
               <input
                 type="text"
                 value={formData.username}
@@ -184,7 +186,7 @@ const Cameras = () => {
               />
             </div>
             <div className="form-group">
-              <label>Password:</label>
+              <label>{T.password}:</label>
               <input
                 type="password"
                 value={formData.password}
@@ -192,7 +194,7 @@ const Cameras = () => {
               />
             </div>
             <div className="form-group">
-              <label>RTSP Port:</label>
+              <label>{T.rtspPort}:</label>
               <input
                 type="number"
                 min="1"
@@ -202,7 +204,7 @@ const Cameras = () => {
               />
             </div>
             <div className="form-group">
-              <label>Stream Path:</label>
+              <label>{T.streamPath}:</label>
               <input
                 type="text"
                 value={formData.rtsp_path}
@@ -212,16 +214,16 @@ const Cameras = () => {
             </div>
             {formData.ip_address && (
               <div className="rtsp-preview">
-                <span className="rtsp-preview-label">RTSP URL preview:</span>
+                <span className="rtsp-preview-label">{T.rtspPreviewLabel}:</span>
                 <code className="rtsp-preview-url">{buildRtspUrl(formData)}</code>
               </div>
             )}
             <div className="form-actions">
               <button type="submit" className="connect-btn">
-                {editingId ? 'Update' : 'Create'}
+                {editingId ? T.update : T.create}
               </button>
               <button type="button" className="disconnect-btn" onClick={handleCancel}>
-                Cancel
+                {T.cancel}
               </button>
             </div>
           </form>
@@ -232,21 +234,21 @@ const Cameras = () => {
         {cameras.map((camera) => (
           <article key={camera.id} className="person-split-card camera-split-card">
             <div className="person-split-photo camera-split-photo">
-              <img src={camSvg} alt="Camera" />
+              <img src={camSvg} alt={T.camerasTitle} />
             </div>
 
             <div className="person-split-info">
               <h3>{camera.model_name}</h3>
-              <p><strong>IP:</strong> {camera.ip_address}</p>
-              {camera.username && <p><strong>User:</strong> {camera.username}</p>}
-              <p className="rtsp-url-display"><strong>RTSP:</strong> <code>{buildRtspUrl(camera)}</code></p>
+              <p><strong>{T.ipLabel}:</strong> {camera.ip_address}</p>
+              {camera.username && <p><strong>{T.userLabel}:</strong> {camera.username}</p>}
+              <p className="rtsp-url-display"><strong>{T.rtspLabel}:</strong> <code>{buildRtspUrl(camera)}</code></p>
               <p>
-                <strong>Stream:</strong>{' '}
+                <strong>{T.streamLabel}:</strong>{' '}
                 {(() => {
                   const s = streamStatus[camera.id];
-                  if (s === 'checking') return <span className="camera-status-chip camera-status-checking">CHECKING…</span>;
-                  if (s === 'online')   return <span className="camera-status-chip camera-status-running">ONLINE</span>;
-                  if (s === 'offline')  return <span className="camera-status-chip camera-status-stopped">OFFLINE</span>;
+                  if (s === 'checking') return <span className="camera-status-chip camera-status-checking">{T.statusChecking}</span>;
+                  if (s === 'online')   return <span className="camera-status-chip camera-status-running">{T.statusOnline}</span>;
+                  if (s === 'offline')  return <span className="camera-status-chip camera-status-stopped">{T.statusOffline}</span>;
                   return <span className="camera-status-chip">—</span>;
                 })()}
               </p>
@@ -254,16 +256,16 @@ const Cameras = () => {
 
             <div className="person-split-actions">
               <button className="btn-edit" onClick={() => handleEdit(camera)}>
-                Edit
+                {T.edit}
               </button>
               <button
                 className={camera.is_active ? 'btn-delete' : 'connect-btn'}
                 onClick={() => handleToggleActive(camera)}
               >
-                {camera.is_active ? 'Deactivate' : 'Activate'}
+                {camera.is_active ? T.deactivate : T.activate}
               </button>
               <button className="btn-delete" onClick={() => handleDelete(camera.id)}>
-                Delete
+                {T.delete}
               </button>
             </div>
           </article>

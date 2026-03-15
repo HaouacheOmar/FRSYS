@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
+import { useLang } from '../context/LangContext';
 import '../styles/VideoStream.css';
 
 const VideoStream = () => {
+  const { T } = useLang();
   const [ws, setWs] = useState(null);
-  const [status, setStatus] = useState({ state: 'disconnected', message: 'Disconnected' });
+  const [status, setStatus] = useState({ state: 'disconnected', message: T.disconnected });
   const [fps, setFps] = useState(0);
   const [faceCount, setFaceCount] = useState(0);
   const [detections, setDetections] = useState([]);
@@ -86,18 +88,18 @@ const VideoStream = () => {
 
   const connectWebSocket = () => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      console.log('Already connected');
+      console.log(T.alreadyConnected);
       return;
     }
 
-    updateStatus('connecting', 'Connecting...');
+    updateStatus('connecting', T.connecting);
 
     try {
       const websocket = new WebSocket(WS_URL);
 
       websocket.onopen = () => {
         console.log('WebSocket connected');
-        updateStatus('connected', 'Connected');
+        updateStatus('connected', T.connected);
         websocket.send(JSON.stringify({ type: 'start' }));
       };
 
@@ -112,12 +114,12 @@ const VideoStream = () => {
 
       websocket.onerror = (error) => {
         console.error('WebSocket error:', error);
-        showError('WebSocket error occurred');
+        showError(T.websocketErrorOccurred);
       };
 
       websocket.onclose = () => {
         console.log('WebSocket closed');
-        updateStatus('disconnected', 'Disconnected');
+        updateStatus('disconnected', T.disconnected);
         wsRef.current = null;
         setWs(null);
       };
@@ -126,8 +128,8 @@ const VideoStream = () => {
       setWs(websocket);
     } catch (e) {
       console.error('Error creating WebSocket:', e);
-      showError('Failed to create WebSocket connection');
-      updateStatus('disconnected', 'Disconnected');
+      showError(T.websocketConnectionFailed);
+      updateStatus('disconnected', T.disconnected);
     }
   };
 
@@ -138,7 +140,7 @@ const VideoStream = () => {
       wsRef.current = null;
       setWs(null);
     }
-    updateStatus('disconnected', 'Disconnected');
+    updateStatus('disconnected', T.disconnected);
   };
 
   useEffect(() => {
@@ -163,7 +165,7 @@ const VideoStream = () => {
     if (det.error) {
       return (
         <div key={index} className="detection-item no-match">
-          <strong>Face {index + 1}:</strong> Error<br />
+          <strong>{T.face} {index + 1}:</strong> {T.errorLabel}<br />
           <small>{det.error}</small>
         </div>
       );
@@ -176,8 +178,8 @@ const VideoStream = () => {
       const compagnie = det.compagnie || 'N/A';
       return (
         <div key={index} className={`detection-item ${statusClass}`}>
-          <strong>Face {index + 1}:</strong> {det.prenom} {det.nom}<br />
-          <small>Matricule: {det.matricule} | Compagnie: {compagnie} | Status: {status}</small>
+          <strong>{T.face} {index + 1}:</strong> {det.prenom} {det.nom}<br />
+          <small>{T.matricule}: {det.matricule} | {T.company}: {compagnie} | {T.statusLabel}: {status}</small>
         </div>
       );
     }
@@ -188,8 +190,8 @@ const VideoStream = () => {
       const statusClass = status.includes('ELIGIBLE') ? '' : 'no-match';
       return (
         <div key={index} className={`detection-item ${statusClass}`}>
-          <strong>Face {index + 1}:</strong> {det.prenom} {det.nom}<br />
-          <small>Status: {status}</small>
+          <strong>{T.face} {index + 1}:</strong> {det.prenom} {det.nom}<br />
+          <small>{T.statusLabel}: {status}</small>
         </div>
       );
     }
@@ -198,7 +200,7 @@ const VideoStream = () => {
     if (det.label) {
       return (
         <div key={index} className="detection-item">
-          <strong>Face {index + 1}:</strong> {det.label}
+          <strong>{T.face} {index + 1}:</strong> {det.label}
         </div>
       );
     }
@@ -206,14 +208,14 @@ const VideoStream = () => {
     // Fallback
     return (
       <div key={index} className="detection-item">
-        <strong>Face {index + 1}:</strong> Detection data unavailable
+        <strong>{T.face} {index + 1}:</strong> {T.dataUnavailable}
       </div>
     );
   };
 
   return (
     <div className="container">
-      <h1>Face Recognition Video Stream</h1>
+      <h1>{T.videoStreamTitle}</h1>
 
       <div className={`status ${status.state}`}>
         {status.message}
@@ -221,32 +223,32 @@ const VideoStream = () => {
 
       {error && (
         <div className="error">
-          Error: {error}
+          {T.errorPrefix}: {error}
         </div>
       )}
 
       <div className="controls">
         <button className="connect-btn" onClick={connectWebSocket}>
-          Connect
+          {T.connect}
         </button>
         <button className="disconnect-btn" onClick={disconnectWebSocket}>
-          Disconnect
+          {T.disconnect}
         </button>
       </div>
 
       <div className="video-container">
-        <img id="videoFrame" src="" alt="Video Stream" />
+        <img id="videoFrame" src="" alt={T.videoStreamTitle} />
       </div>
 
       <div className="info">
-        FPS: <span>{fps}</span> | Faces Detected: <span>{faceCount}</span>
+        {T.fpsLabel}: <span>{fps}</span> | {T.facesDetectedLabel}: <span>{faceCount}</span>
       </div>
 
       <div className="detections">
-        <h3>Detections:</h3>
+        <h3>{T.detectionsTitle}:</h3>
         <div className="detections-list">
           {detections.length === 0 ? (
-            <p style={{ color: '#999', textAlign: 'center' }}>No faces detected</p>
+            <p style={{ color: '#999', textAlign: 'center' }}>{T.noFacesText}</p>
           ) : (
             detections.map((det, index) => renderDetectionItem(det, index))
           )}

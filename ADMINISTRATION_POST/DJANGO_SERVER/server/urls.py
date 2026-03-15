@@ -3,10 +3,34 @@ URL configuration for server app.
 """
 from django.urls import path
 from . import views
+from .auth_views import (
+    CSRFTokenView,
+    CreateGrantTokenView,
+    GuestAccountDetailView,
+    GuestAccountsView,
+    GrantRoleView,
+    LoginView,
+    LogoutView,
+    MeView,
+    RefreshTokenView,
+    RegisterWithGrantTokenView,
+)
 
 app_name = 'server'
 
 urlpatterns = [
+    # Auth endpoints
+    path('api/auth/csrf/', CSRFTokenView.as_view(), name='auth-csrf'),
+    path('api/auth/login/', LoginView.as_view(), name='auth-login'),
+    path('api/auth/logout/', LogoutView.as_view(), name='auth-logout'),
+    path('api/auth/refresh/', RefreshTokenView.as_view(), name='auth-refresh'),
+    path('api/auth/me/', MeView.as_view(), name='auth-me'),
+    path('api/auth/grant-token/', CreateGrantTokenView.as_view(), name='auth-grant-token'),
+    path('api/auth/register-with-token/', RegisterWithGrantTokenView.as_view(), name='auth-register-with-token'),
+    path('api/auth/grant-role/', GrantRoleView.as_view(), name='auth-grant-role'),
+    path('api/auth/guests/', GuestAccountsView.as_view(), name='auth-guests'),
+    path('api/auth/guests/<int:user_id>/', GuestAccountDetailView.as_view(), name='auth-guests-detail'),
+
     # Traditional views
     path('video-stream/', views.video_stream_view, name='video_stream'),
     path('api/status/', views.api_status, name='api_status'),
