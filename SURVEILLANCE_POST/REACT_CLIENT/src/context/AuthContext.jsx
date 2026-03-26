@@ -24,7 +24,7 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    const socket = new WebSocket('ws://localhost:8000/ws/presence/guest/');
+    const socket = new WebSocket('ws://192.168.1.105:8000/ws/presence/guest/');
     socket.onopen = () => {
       socket.send(JSON.stringify({ type: 'ping' }));
     };

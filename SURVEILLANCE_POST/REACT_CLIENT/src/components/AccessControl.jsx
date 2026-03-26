@@ -35,10 +35,15 @@ const AccessControl = () => {
   };
 
   // Real-time: handle guest online/offline events
+// Real-time: handle guest online/offline events
   useEffect(() => {
     let ws;
     if (user && user.role === 'admin') {
-      ws = new WebSocket('ws://localhost:8000/ws/admin/notifications/');
+      
+      // ✅ UPDATED: Dynamic WebSocket URL
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${window.location.host}/ws/admin/notifications/`);
+      
       wsRef.current = ws;
       ws.onopen = () => {
         ws.send(JSON.stringify({ type: 'ping' }));
@@ -48,7 +53,6 @@ const AccessControl = () => {
           const data = JSON.parse(event.data);
           if (data.type !== 'admin_notification') return;
           if (data.event === 'guest_snapshot') {
-            // Update only online status for guests in the list
             const onlineMap = {};
             (data.payload?.online_guests || []).forEach(g => { onlineMap[g.username] = true; });
             setGuests(prev => prev.map(g => ({ ...g, is_online: !!onlineMap[g.username] })));
@@ -71,7 +75,6 @@ const AccessControl = () => {
       }
     };
   }, [user]);
-
 
 
   useEffect(() => {

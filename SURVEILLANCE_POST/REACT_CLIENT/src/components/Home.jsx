@@ -26,7 +26,10 @@ const Home = () => {
     }
 
     setSocketState('connecting');
-    const ws = new WebSocket('ws://localhost:8000/ws/admin/notifications/');
+    
+    // ✅ UPDATED: Dynamic WebSocket URL via Vite Proxy
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/ws/admin/notifications/`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -65,7 +68,7 @@ const Home = () => {
           });
         }
       } catch {
-        // Ignore malformed payloads
+        // ignore JSON parse errors
       }
     };
 
@@ -85,6 +88,7 @@ const Home = () => {
       }
     };
   }, [role]);
+
 
   return (
     <div className="container">

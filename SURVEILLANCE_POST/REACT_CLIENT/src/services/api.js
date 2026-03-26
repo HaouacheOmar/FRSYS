@@ -1,5 +1,5 @@
-// API service for backend communication
-export const API_BASE_URL = 'http://localhost:8000/api';
+
+export const API_BASE_URL = '/api';
 
 const CSRF_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 let csrfFetchPromise = null;
