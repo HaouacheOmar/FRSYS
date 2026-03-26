@@ -14,8 +14,10 @@ const VideoStream = () => {
   const lastFpsUpdate = useRef(Date.now());
   const wsRef = useRef(null);
 
-  // WebSocket server URL - matches Django backend
-  const WS_URL = 'ws://localhost:8000/ws/video/stream/';
+  // ✅ UPDATED: Dynamic WebSocket URL
+  // This routes the WS request through the Vite Proxy so your cookies are securely attached!
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const WS_URL = `${protocol}//${window.location.host}/ws/video/stream/`;
 
   const updateStatus = (state, message) => {
     setStatus({ state, message });
