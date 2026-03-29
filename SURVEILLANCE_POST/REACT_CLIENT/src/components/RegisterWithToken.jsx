@@ -1,3 +1,4 @@
+// register with token: simple registration form used by admin-invited users
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
@@ -12,6 +13,7 @@ const RegisterWithToken = () => {
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // submit registration using the provided token
   const onSubmit = async (event) => {
     event.preventDefault();
     setError('');

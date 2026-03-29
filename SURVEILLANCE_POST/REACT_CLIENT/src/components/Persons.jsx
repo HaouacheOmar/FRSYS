@@ -1,3 +1,5 @@
+// persons management: list, create, edit and delete people
+// simple form and cards grid showing main photo and company
 import { useState, useEffect } from 'react';
 import { personsAPI, compagniesAPI, API_BASE_URL } from '../services/api';
 import { useLang } from '../context/LangContext';

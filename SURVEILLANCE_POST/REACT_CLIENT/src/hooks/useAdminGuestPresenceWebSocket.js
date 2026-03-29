@@ -8,7 +8,6 @@ export function useAdminGuestPresenceWebSocket(onGuestsUpdate) {
     let reconnectTimeout;
     
     function connect() {
-      // ✅ UPDATED: Dynamic WebSocket URL
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       ws = new window.WebSocket(`${protocol}//${window.location.host}/ws/admin/notifications/`);
       

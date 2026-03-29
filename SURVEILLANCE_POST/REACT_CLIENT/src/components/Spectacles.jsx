@@ -1,9 +1,14 @@
+// spectacles component: list, import and manage issued spectacles/glasses
+// simple ui: upload excel, create/edit/delete, filter pending/completed
 import { useState, useEffect } from 'react';
 import { spectaclesAPI, personsAPI, API_BASE_URL } from '../services/api';
 import { useLang } from '../context/LangContext';
 
 const Spectacles = () => {
+  // translations
   const { T } = useLang();
+
+  // main state: list of spectacles and persons
   const [spectacles, setSpectacles] = useState([]);
   const [persons, setPersons] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,17 +24,20 @@ const Spectacles = () => {
   });
   const [editingId, setEditingId] = useState(null);
 
+  // load persons and spectacles whenever filter changes
   useEffect(() => {
     loadPersons();
     loadSpectacles();
   }, [filter]);
 
+  // helper: normalize api list responses (supports pagination)
   const normalizeListResponse = (data) => {
     if (Array.isArray(data)) return data;
     if (Array.isArray(data?.results)) return data.results;
     return [];
   };
 
+  // fetch spectacles using filter
   const loadSpectacles = async () => {
     try {
       setLoading(true);
@@ -50,6 +58,7 @@ const Spectacles = () => {
     }
   };
 
+  // fetch persons for select lists
   const loadPersons = async () => {
     try {
       const data = await personsAPI.list();
@@ -59,6 +68,7 @@ const Spectacles = () => {
     }
   };
 
+  // handle excel file upload: validate extension and call backend import
   const handleExcelUpload = async (file) => {
     if (!file) return;
     const fileName = file.name || '';
@@ -88,12 +98,14 @@ const Spectacles = () => {
     }
   };
 
+  // file input change handler
   const onFileInputChange = async (e) => {
     const [file] = e.target.files || [];
     await handleExcelUpload(file);
     e.target.value = '';
   };
 
+  // drag/drop helpers for the excel zone
   const onDragOver = (e) => {
     e.preventDefault();
     setIsDragging(true);
@@ -111,6 +123,7 @@ const Spectacles = () => {
     await handleExcelUpload(file);
   };
 
+  // create or update spectacle
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -134,6 +147,7 @@ const Spectacles = () => {
     }
   };
 
+  // populate form for editing
   const handleEdit = (spectacle) => {
     setFormData({
       person: String(spectacle.person?.id ?? spectacle.person ?? ''),
@@ -145,6 +159,7 @@ const Spectacles = () => {
     setShowForm(true);
   };
 
+  // delete with confirmation
   const handleDelete = async (id) => {
     if (window.confirm(T.deleteConfirmSpectacle)) {
       try {
@@ -156,6 +171,7 @@ const Spectacles = () => {
     }
   };
 
+  // mark as returned
   const handleMarkReturn = async (id) => {
     try {
       await spectaclesAPI.markReturn(id);
@@ -171,6 +187,7 @@ const Spectacles = () => {
     setEditingId(null);
   };
 
+  // helpers to display person name/id and main photo url
   const getPersonName = (personField) => {
     if (personField && typeof personField === 'object') {
       return `${personField.prenom || ''} ${personField.nom || ''}`.trim() || T.na;
@@ -199,6 +216,7 @@ const Spectacles = () => {
 
   if (loading) return <div className="container"><p>{T.loading}</p></div>;
 
+  // ui: list, controls, dropzone and optional form
   return (
     <div className="container">
       <h1>{T.spectaclesTitle}</h1>

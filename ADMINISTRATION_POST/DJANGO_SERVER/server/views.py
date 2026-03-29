@@ -191,17 +191,14 @@ class PersonViewSet(viewsets.ModelViewSet):
 
 class CameraViewSet(viewsets.ModelViewSet):
     """
-    API endpoint for managing cameras.
+    - get /api/cameras/ -  all cameras
+    - post /api/cameras/ -  new camera
+    - get /api/cameras/{id}/ -  specific camera
+    - put /api/cameras/{id}/ - update camera
+    - patch /api/cameras/{id}/ - part update
+    - del /api/cameras/{id}/ - del camera
     
-    Provides CRUD operations:
-    - GET /api/cameras/ - List all cameras
-    - POST /api/cameras/ - Create new camera
-    - GET /api/cameras/{id}/ - Retrieve specific camera
-    - PUT /api/cameras/{id}/ - Update camera
-    - PATCH /api/cameras/{id}/ - Partial update
-    - DELETE /api/cameras/{id}/ - Delete camera
-    
-    Filters:
+    filt:
     - ?is_active={true/false} - Filter by active status
     - ?search={query} - Search in model_name, ip_address
     """
@@ -317,15 +314,13 @@ def _probe_camera(camera):
 
 class SpectacleViewSet(viewsets.ModelViewSet):
     """
-    API endpoint for managing outing records (spectacles).
     
-    Provides CRUD operations:
-    - GET /api/spectacles/ - List all outings
-    - POST /api/spectacles/ - Create new outing
-    - GET /api/spectacles/{id}/ - Retrieve specific outing
-    - PUT /api/spectacles/{id}/ - Update outing
-    - PATCH /api/spectacles/{id}/ - Partial update
-    - DELETE /api/spectacles/{id}/ - Delete outing
+    - get /api/spectacles/ -  all outings
+    - post /api/spectacles/ -  new outing
+    - get /api/spectacles/{id}/ -  specific outing
+    - put /api/spectacles/{id}/ - update outing
+    - patch /api/spectacles/{id}/ - part update
+    - del /api/spectacles/{id}/ - del outing
     
     Filters:
     - ?person={id} - Filter by person
@@ -358,9 +353,9 @@ class SpectacleViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         """
-        Supports 2 modes:
-        1) Default JSON create (existing behavior)
-        2) Excel bulk import when a file is sent in request.FILES["file"] or ["excel"]
+         2 modes:
+        1) default JSON create
+        2) excel bulk import when a file is sent in request.FILES["file"] or ["excel"]
         """
         excel_file = request.FILES.get("file") or request.FILES.get("excel")
         if not excel_file:
@@ -520,18 +515,16 @@ class SpectacleViewSet(viewsets.ModelViewSet):
 
 class RentreeViewSet(viewsets.ModelViewSet):
     """
-    API endpoint for managing return events.
     
-    Provides CRUD operations:
-    - GET /api/rentrees/ - List all return events
-    - POST /api/rentrees/ - Create new return event
-    - GET /api/rentrees/{id}/ - Retrieve specific return event
-    - PUT /api/rentrees/{id}/ - Update return event
-    - PATCH /api/rentrees/{id}/ - Partial update
-    - DELETE /api/rentrees/{id}/ - Delete return event
+    - get /api/rentrees/ -  all return tolab
+    - post /api/rentrees/ -  new return taleb
+    - get /api/rentrees/{id}/ -  specific return taleb
+    - put /api/rentrees/{id}/ - update return taleb
+    - patch /api/rentrees/{id}/ - part update
+    - del /api/rentrees/{id}/ - delt return taleb
     
-    Filters:
-    - ?person={id} - Filter by person
+    filt:
+    - ?person={id} - Filter by taleb
     - ?spectacle={id} - Filter by outing
     - ?est_retard={true/false} - Filter by late status
     """

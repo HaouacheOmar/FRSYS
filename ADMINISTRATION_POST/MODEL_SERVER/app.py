@@ -1,3 +1,5 @@
+import daphne
+
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import cv2
@@ -16,7 +18,8 @@ app = FastAPI(title="Face Recognition Model Server", version="1.0.0")
 # CORS configuration - Allow Django server to connect
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
+    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000",    "http://192.168.1.104:8000"
+],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -28,7 +31,7 @@ DB_PATH = r"C:\Users\youne\OneDrive\Desktop\test_photos"
 
 face_service = FaceRecognitionService(
     db_path=DB_PATH,
-    model_name="Facenet512"
+    model_name="buffalo_l" # Replaced Facenet512
 )
 
 @app.get("/")
@@ -47,7 +50,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "Face Recognition Model Server",
-        "model": "Facenet512",
+        "model": "InsightFace (buffalo_l)", # Updated label
         "db_path": DB_PATH
     }
 
@@ -156,13 +159,13 @@ async def register_face(person_id: str, file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    import uvicorn
+    import daphne
     
     logger.info("Starting Face Recognition Model Server...")
     logger.info(f"Database path: {DB_PATH}")
     
     # Run on localhost only (not exposed to network)
-    uvicorn.run(
+    daphne.run(
         app,
         host="127.0.0.1",  # localhost only for security
         port=5000,

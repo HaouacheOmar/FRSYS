@@ -1,3 +1,5 @@
+// rentrees component: shows recorded returns and listens to camera websocket
+// it can auto-detect returned items from websocket frames and refresh list
 import { useState, useEffect, useRef } from 'react';
 import { rentreesAPI, API_BASE_URL } from '../services/api';
 import { useLang } from '../context/LangContext';
@@ -13,7 +15,8 @@ const Rentrees = () => {
   const wsRef = useRef(null);
   const refreshLockRef = useRef(false);
 
-  const WS_URL = 'ws://localhost:8000/ws/video/stream/';
+  // websocket url used by this component (local dev default)
+  const WS_URL = 'ws://127.0.0.1:8000/ws/video/stream/';
   const getSocketLabel = (state) => {
     if (state === 'connected') return T.connected;
     if (state === 'connecting') return T.connecting;
@@ -25,6 +28,7 @@ const Rentrees = () => {
     loadRentrees();
   }, [showLateOnly]);
 
+  // cleanup socket on unmount
   useEffect(() => {
     return () => {
       if (wsRef.current) {
@@ -46,6 +50,7 @@ const Rentrees = () => {
     }
   };
 
+  // small debounce to avoid rapid refreshes
   const scheduleRentreesRefresh = () => {
     if (refreshLockRef.current) return;
     refreshLockRef.current = true;
@@ -55,6 +60,7 @@ const Rentrees = () => {
     }, 1000);
   };
 
+  // connect to camera websocket and listen for return events
   const connectCamera = () => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
 
@@ -71,6 +77,7 @@ const Rentrees = () => {
         const data = JSON.parse(event.data);
         if (data.type !== 'frame' || !Array.isArray(data.detections)) return;
 
+        // filter detections that indicate returned items
         const returns = data.detections.filter((det) => {
           const statusText = String(det?.status || det?.label || '').toUpperCase();
           return statusText.includes('RETURNED - ON TIME') || statusText.includes('RETURNED - LATE');
@@ -84,6 +91,7 @@ const Rentrees = () => {
             time: det.date_rentree || new Date().toLocaleString(),
           }));
 
+          // keep recent events at the top and limit to 8
           setCameraEvents((prev) => [...entries, ...prev].slice(0, 8));
           scheduleRentreesRefresh();
         }
@@ -113,6 +121,7 @@ const Rentrees = () => {
     setWsState('disconnected');
   };
 
+  // small helpers to display person and photo
   const getPersonInfo = (rentree) => {
     const person = rentree?.spectacle?.person;
     if (!person) return { name: T.unknown, id: null };
