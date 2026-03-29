@@ -12,7 +12,9 @@ import numpy as np
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 
-from .services.Stream import VideoStreamProcessor, RTSP_URL, PROCESS_SCALE, DISPLAY_FPS, IDLE_SLEEP_SEC
+from .services.Stream import VideoStreamProcessor, PROCESS_SCALE, DISPLAY_FPS, IDLE_SLEEP_SEC
+from .views import _build_rtsp_url
+from .models import Camera
 from .auth_utils import get_user_role
 from .models import UserRole
 from .presence import (
@@ -74,14 +76,22 @@ class VideoStreamConsumer(AsyncWebsocketConsumer):
     async def _initialize_stream_processor(self):
         """Initialize the video stream processor. Returns True on success."""
         try:
+            # pick the first active camera from the database
+            camera = await database_sync_to_async(lambda: Camera.objects.filter(is_active=True).first())()
+            if not camera:
+                await self.send_json('error', message='no active camera configured')
+                return False
+
+            rtsp_url = _build_rtsp_url(camera)
+
             VideoStreamConsumer.stream_processor = VideoStreamProcessor(
-                rtsp_url=RTSP_URL,
+                rtsp_url=rtsp_url,
                 process_scale=PROCESS_SCALE,
                 display_fps=DISPLAY_FPS,
                 idle_sleep_sec=IDLE_SLEEP_SEC
             )
             await asyncio.to_thread(VideoStreamConsumer.stream_processor.start)
-            print(f"VideoStreamProcessor started with source: {RTSP_URL}")
+            print(f"VideoStreamProcessor started with source: {rtsp_url} (camera id={camera.id})")
             return True
         except Exception as e:
             print(f"Error starting VideoStreamProcessor: {e}")

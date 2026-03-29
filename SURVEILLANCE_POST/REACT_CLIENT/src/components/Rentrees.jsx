@@ -1,7 +1,7 @@
 // rentrees component: shows recorded returns and listens to camera websocket
 // it can auto-detect returned items from websocket frames and refresh list
 import { useState, useEffect, useRef } from 'react';
-import { rentreesAPI, API_BASE_URL } from '../services/api';
+import { rentreesAPI, API_BASE_URL, compagniesAPI } from '../services/api';
 import { useLang } from '../context/LangContext';
 
 const Rentrees = () => {
@@ -9,6 +9,8 @@ const Rentrees = () => {
   const [rentrees, setRentrees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [companies, setCompanies] = useState([]);
+  const [companyFilter, setCompanyFilter] = useState('');
   const [showLateOnly, setShowLateOnly] = useState(false);
   const [wsState, setWsState] = useState('disconnected');
   const [cameraEvents, setCameraEvents] = useState([]);
@@ -26,7 +28,11 @@ const Rentrees = () => {
 
   useEffect(() => {
     loadRentrees();
-  }, [showLateOnly]);
+  }, [showLateOnly, companyFilter]);
+
+  useEffect(() => {
+    loadCompanies();
+  }, []);
 
   // cleanup socket on unmount
   useEffect(() => {
@@ -40,13 +46,24 @@ const Rentrees = () => {
   const loadRentrees = async () => {
     try {
       setLoading(true);
-      const data = showLateOnly ? await rentreesAPI.lateReturns() : await rentreesAPI.list();
+      const params = {};
+      if (companyFilter) params.compagnie = companyFilter;
+      const data = showLateOnly ? await rentreesAPI.lateReturns(params) : await rentreesAPI.list(params);
       setRentrees(data.results || []);
       setError('');
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCompanies = async () => {
+    try {
+      const data = await compagniesAPI.list();
+      setCompanies(data.results || []);
+    } catch (err) {
+      console.error('Failed to load companies:', err);
     }
   };
 
@@ -170,6 +187,12 @@ const Rentrees = () => {
         <button className="disconnect-btn" onClick={disconnectCamera}>
           {T.stopCameraRecognition}
         </button>
+        <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)} style={{ marginLeft: 10 }}>
+          <option value="">{T.selectCompany}</option>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>{c.label}</option>
+          ))}
+        </select>
         <div className="filter-buttons">
           <button
             className={!showLateOnly ? 'filter-active' : 'filter-btn'}
@@ -200,7 +223,13 @@ const Rentrees = () => {
       )}
 
       <div className="persons-cards-grid">
-        {rentrees.map((rentree) => {
+        {rentrees
+          .filter((rentree) => {
+            if (!companyFilter) return true;
+            const cid = rentree?.spectacle?.person?.compagnie?.id || rentree?.spectacle?.person?.compagnie || null;
+            return Number(cid) === Number(companyFilter);
+          })
+          .map((rentree) => {
           const { name } = getPersonInfo(rentree);
           const isLate = rentree.est_retard;
           const dateSortie = rentree?.spectacle?.date_sortie;
