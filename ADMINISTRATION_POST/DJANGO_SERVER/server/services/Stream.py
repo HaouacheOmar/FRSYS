@@ -12,8 +12,8 @@ from .recongnition import process_frame
 
 
 # Stream configuration
-# RTSP_URL = 'rtsp://admin:admin123@192.168.1.108:554/cam/realmonitor?channel=1&subtype=0'
-RTSP_URL = 0
+# rtsp url can be provided explicitly or resolved from the database at runtime
+RTSP_URL = None
 PROCESS_SCALE = 1.0
 IDLE_SLEEP_SEC = 0.005
 DISPLAY_FPS = 30
@@ -27,7 +27,7 @@ class VideoStreamProcessor:
     Uses multi-threading to separate capture, processing, and drawing operations.
     """
     
-    def __init__(self, rtsp_url=RTSP_URL, process_scale=PROCESS_SCALE,
+    def __init__(self, rtsp_url=None, process_scale=PROCESS_SCALE,
                  display_fps=DISPLAY_FPS, idle_sleep_sec=IDLE_SLEEP_SEC,
                  process_every_n_frames=PROCESS_EVERY_N_FRAMES):
         """
@@ -40,7 +40,46 @@ class VideoStreamProcessor:
             idle_sleep_sec: Sleep duration when idle
             process_every_n_frames: Only run recognition every N frames to reduce load
         """
-        self.rtsp_url = rtsp_url
+        # determine runtime rtsp url:
+        # - prefer explicit rtsp_url argument when provided and truthy
+        # - otherwise attempt to resolve from Camera DB
+        def _build_from_camera(camera):
+            user = camera.username or ''
+            pwd = camera.get_camera_password() or ''
+            ip = camera.ip_address or ''
+            port = camera.rtsp_port or 554
+            path = camera.rtsp_path or '/stream'
+            if not path.startswith('/'):
+                path = '/' + path
+            if user and pwd:
+                creds = f'{user}:{pwd}@'
+            elif user:
+                creds = f'{user}@'
+            else:
+                creds = ''
+            return f'rtsp://{creds}{ip}:{port}{path}'
+
+        def _resolve_rtsp_from_db(camera_id=None):
+            try:
+                # import here to avoid circular imports at module load
+                from server.models import Camera
+                if camera_id:
+                    cam = Camera.objects.filter(pk=camera_id).first()
+                else:
+                    cam = Camera.objects.filter(is_active=True).first()
+                if not cam:
+                    return ''
+                return _build_from_camera(cam)
+            except Exception as e:
+                print(f"[Stream] failed to resolve rtsp url from db: {e}")
+                return ''
+
+        # accept common falsy defaults (None, 0, empty string)
+        if rtsp_url is None or rtsp_url == 0 or (isinstance(rtsp_url, str) and not rtsp_url.strip()):
+            resolved = _resolve_rtsp_from_db()
+            self.rtsp_url = resolved or rtsp_url
+        else:
+            self.rtsp_url = rtsp_url
         self.process_scale = process_scale
         self.display_fps = display_fps
         self.idle_sleep_sec = idle_sleep_sec

@@ -52,6 +52,8 @@ urlpatterns = [
     path('api/cameras/<int:pk>/', views.CameraViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}), name='camera-detail'),
     path('api/cameras/<int:pk>/activate/', views.CameraViewSet.as_view({'post': 'activate'}), name='camera-activate'),
     path('api/cameras/<int:pk>/deactivate/', views.CameraViewSet.as_view({'post': 'deactivate'}), name='camera-deactivate'),
+    path('api/cameras/<int:pk>/ping/', views.CameraViewSet.as_view({'get': 'ping'}), name='camera-ping'),
+    path('api/cameras/ping_all/', views.CameraViewSet.as_view({'get': 'ping_all'}), name='camera-ping-all'),
     
     # Spectacle endpoints
     path('api/spectacles/', views.SpectacleViewSet.as_view({'get': 'list', 'post': 'create'}), name='spectacle-list'),

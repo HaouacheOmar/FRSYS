@@ -1,7 +1,7 @@
 // spectacles component: list, import and manage issued spectacles/glasses
 // simple ui: upload excel, create/edit/delete, filter pending/completed
 import { useState, useEffect } from 'react';
-import { spectaclesAPI, personsAPI, API_BASE_URL } from '../services/api';
+import { spectaclesAPI, personsAPI, API_BASE_URL, compagniesAPI } from '../services/api';
 import { useLang } from '../context/LangContext';
 
 const Spectacles = () => {
@@ -11,6 +11,8 @@ const Spectacles = () => {
   // main state: list of spectacles and persons
   const [spectacles, setSpectacles] = useState([]);
   const [persons, setPersons] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [companyFilter, setCompanyFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [uploadSummary, setUploadSummary] = useState(null);
@@ -28,7 +30,8 @@ const Spectacles = () => {
   useEffect(() => {
     loadPersons();
     loadSpectacles();
-  }, [filter]);
+    loadCompanies();
+  }, [filter, companyFilter]);
 
   // helper: normalize api list responses (supports pagination)
   const normalizeListResponse = (data) => {
@@ -41,13 +44,15 @@ const Spectacles = () => {
   const loadSpectacles = async () => {
     try {
       setLoading(true);
+      const params = {};
+      if (companyFilter) params.compagnie = companyFilter;
       let data;
       if (filter === 'pending') {
-        data = await spectaclesAPI.pending();
+        data = await spectaclesAPI.pending(params);
       } else if (filter === 'completed') {
-        data = await spectaclesAPI.completed();
+        data = await spectaclesAPI.completed(params);
       } else {
-        data = await spectaclesAPI.list();
+        data = await spectaclesAPI.list(params);
       }
       setSpectacles(normalizeListResponse(data));
       setError('');
@@ -55,6 +60,15 @@ const Spectacles = () => {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCompanies = async () => {
+    try {
+      const data = await compagniesAPI.list();
+      setCompanies(data.results || []);
+    } catch (err) {
+      console.error('Failed to load companies:', err);
     }
   };
 
@@ -227,6 +241,12 @@ const Spectacles = () => {
         <button className="connect-btn" onClick={() => setShowForm(true)}>
           {T.addSpectacle}
         </button>
+        <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)} style={{ marginLeft: 10 }}>
+          <option value="">{T.selectCompany}</option>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>{c.label}</option>
+          ))}
+        </select>
         <div className="filter-buttons">
           <button
             className={filter === 'all' ? 'filter-active' : 'filter-btn'}
@@ -328,7 +348,13 @@ const Spectacles = () => {
       )}
 
       <div className="persons-cards-grid">
-        {spectacles.map((spectacle) => {
+        {spectacles
+          .filter((spectacle) => {
+            if (!companyFilter) return true;
+            const cid = spectacle?.person?.compagnie?.id || spectacle?.person?.compagnie || null;
+            return Number(cid) === Number(companyFilter);
+          })
+          .map((spectacle) => {
           const isPending = !spectacle.date_rentree;
           return (
             <article key={spectacle.id} className="person-split-card spectacle-split-card">

@@ -400,9 +400,6 @@ def load_face_database():
 load_face_database()
 
 
-# ==========================================
-# Your existing Django logic (Unchanged)
-# ==========================================
 
 def normalize_mat(value):
     if value is None: return ""
@@ -509,9 +506,7 @@ def check_spectacle_eligibility(identity, mark_return=False):
         return False, None, f"{mat} - ERROR"
 
 
-# ==========================================
-# New InsightFace Processing Pipeline
-# ==========================================
+
 
 def process_frame(frame, scale_x=1.0, scale_y=1.0, recognition_mode='checkin'):
     boxes = []

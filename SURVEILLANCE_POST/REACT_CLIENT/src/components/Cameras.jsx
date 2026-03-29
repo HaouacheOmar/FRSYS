@@ -23,6 +23,23 @@ const Cameras = () => {
   const [streamStatus, setStreamStatus] = useState({});
   const probeIntervalRef = useRef(null);
 
+  // helper: build an rtsp url from camera data or form data
+  // supports optional username/password and normalizes the path
+  const buildRtspUrl = (cam) => {
+    if (!cam || !cam.ip_address) return '';
+    const host = cam.ip_address;
+    const port = cam.rtsp_port ?? 554;
+    const user = cam.username || '';
+    const pass = cam.password || '';
+    // ensure path starts with '/'
+    let path = cam.rtsp_path || '/stream';
+    if (!path.startsWith('/')) path = '/' + path;
+
+    // build auth segment only when username provided
+    const auth = user ? `${encodeURIComponent(user)}${pass ? `:${encodeURIComponent(pass)}` : ''}@` : '';
+    return `rtsp://${auth}${host}:${port}${path}`;
+  };
+
   useEffect(() => {
     loadCameras();
     return () => {
