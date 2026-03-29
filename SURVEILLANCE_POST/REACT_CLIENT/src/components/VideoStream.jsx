@@ -1,33 +1,45 @@
+// imports: react hooks, language translations, and styles
 import { useState, useEffect, useRef } from 'react';
 import { useLang } from '../context/LangContext';
 import '../styles/VideoStream.css';
 
+// video stream component: connects to a websocket, shows frames,
+// displays detections and simple connection controls.
 const VideoStream = () => {
+  // translation helper
   const { T } = useLang();
+
+  // websocket and ui state
   const [ws, setWs] = useState(null);
   const [status, setStatus] = useState({ state: 'disconnected', message: T.disconnected });
   const [fps, setFps] = useState(0);
   const [faceCount, setFaceCount] = useState(0);
   const [detections, setDetections] = useState([]);
   const [error, setError] = useState('');
+
+  // frame counting for fps calculation
   const [frameCount, setFrameCount] = useState(0);
   const lastFpsUpdate = useRef(Date.now());
+
+  // refs to keep websocket instance between renders
   const wsRef = useRef(null);
 
-  // ✅ UPDATED: Dynamic WebSocket URL
-  // This routes the WS request through the Vite Proxy so your cookies are securely attached!
+  // build ws url: use secure ws on https, otherwise ws
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const WS_URL = `${protocol}//${window.location.host}/ws/video/stream/`;
 
+  // update connection status text shown in the ui
   const updateStatus = (state, message) => {
     setStatus({ state, message });
   };
 
+  // show a transient error message for 5s
   const showError = (message) => {
     setError(message);
     setTimeout(() => setError(''), 5000);
   };
 
+  // increment frame counter and compute fps every ~1000ms
   const updateFps = () => {
     setFrameCount(prev => {
       const count = prev + 1;
@@ -44,25 +56,29 @@ const VideoStream = () => {
     });
   };
 
+  // handle messages coming from the server via ws
   const handleMessage = (data) => {
     switch(data.type) {
       case 'frame':
+        // image frame with optional detections
         displayFrame(data);
         updateDetections(data.detections);
         updateFps();
         break;
 
       case 'error':
+        // server reported an error
         showError(data.message);
         break;
 
       case 'connection':
       case 'status':
+        // informational messages
         console.log(data.message);
         break;
 
       case 'pong':
-        // Keepalive acknowledgement
+        // keepalive acknowledgement, ignore
         break;
 
       default:
@@ -70,6 +86,7 @@ const VideoStream = () => {
     }
   };
 
+  // set the image element src to the base64 jpeg from server
   const displayFrame = (data) => {
     const img = document.getElementById('videoFrame');
     if (img) {
@@ -77,6 +94,7 @@ const VideoStream = () => {
     }
   };
 
+  // normalize detections: ensure array, update count and list
   const updateDetections = (detectionData) => {
     if (!Array.isArray(detectionData)) {
       setFaceCount(0);
@@ -88,6 +106,7 @@ const VideoStream = () => {
     setDetections(detectionData);
   };
 
+  // open a websocket connection and wire event handlers
   const connectWebSocket = () => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       console.log(T.alreadyConnected);
@@ -100,6 +119,7 @@ const VideoStream = () => {
       const websocket = new WebSocket(WS_URL);
 
       websocket.onopen = () => {
+        // notify server to start streaming frames
         console.log('WebSocket connected');
         updateStatus('connected', T.connected);
         websocket.send(JSON.stringify({ type: 'start' }));
@@ -120,6 +140,7 @@ const VideoStream = () => {
       };
 
       websocket.onclose = () => {
+        // cleanup on close
         console.log('WebSocket closed');
         updateStatus('disconnected', T.disconnected);
         wsRef.current = null;
@@ -135,6 +156,7 @@ const VideoStream = () => {
     }
   };
 
+  // ask server to stop and then close the socket
   const disconnectWebSocket = () => {
     if (wsRef.current) {
       wsRef.current.send(JSON.stringify({ type: 'stop' }));
@@ -145,15 +167,15 @@ const VideoStream = () => {
     updateStatus('disconnected', T.disconnected);
   };
 
+  // keepalive ping every 30s and cleanup on unmount
   useEffect(() => {
-    // Keep connection alive with periodic ping
     const pingInterval = setInterval(() => {
       if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
         wsRef.current.send(JSON.stringify({ type: 'ping' }));
       }
     }, 30000);
 
-    // Cleanup on unmount
+    // cleanup when component unmounts
     return () => {
       clearInterval(pingInterval);
       if (wsRef.current) {
@@ -162,8 +184,9 @@ const VideoStream = () => {
     };
   }, []);
 
+  // render a single detection box in the side panel
   const renderDetectionItem = (det, index) => {
-    // Handle error
+    // error from server for this face
     if (det.error) {
       return (
         <div key={index} className="detection-item no-match">
@@ -173,7 +196,7 @@ const VideoStream = () => {
       );
     }
 
-    // Handle detected person with full info
+    // full person info available: show name, matricule, company and status
     if (det.matricule && det.nom && det.prenom) {
       const status = det.status || 'UNKNOWN';
       const statusClass = status.includes('ELIGIBLE') ? '' : 'no-match';
@@ -186,7 +209,7 @@ const VideoStream = () => {
       );
     }
 
-    // Handle partial info
+    // partial info: name but no matricule
     if (det.nom && det.prenom) {
       const status = det.status || 'UNKNOWN';
       const statusClass = status.includes('ELIGIBLE') ? '' : 'no-match';
@@ -198,7 +221,7 @@ const VideoStream = () => {
       );
     }
 
-    // Handle label from box
+    // detection label provided by drawing code
     if (det.label) {
       return (
         <div key={index} className="detection-item">
@@ -207,7 +230,7 @@ const VideoStream = () => {
       );
     }
 
-    // Fallback
+    // fallback when no useful data available
     return (
       <div key={index} className="detection-item">
         <strong>{T.face} {index + 1}:</strong> {T.dataUnavailable}
@@ -215,6 +238,7 @@ const VideoStream = () => {
     );
   };
 
+  // component ui
   return (
     <div className="container">
       <h1>{T.videoStreamTitle}</h1>

@@ -12,7 +12,8 @@ from .recongnition import process_frame
 
 
 # Stream configuration
-RTSP_URL = 0  # Use 0 for webcam, or replace with actual RTSP URL for network stream
+# RTSP_URL = 'rtsp://admin:admin123@192.168.1.108:554/cam/realmonitor?channel=1&subtype=0'
+RTSP_URL = 0
 PROCESS_SCALE = 1.0
 IDLE_SLEEP_SEC = 0.005
 DISPLAY_FPS = 30
@@ -316,7 +317,10 @@ class VideoStreamProcessor:
             self.drawer_thread.join(timeout=1.0)
         if self.cap:
             self.cap.release()
-        cv2.destroyAllWindows()
+        try:
+            cv2.destroyAllWindows()
+        except Exception:
+            pass
         print("Released resources and exited")
 
 

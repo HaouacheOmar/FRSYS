@@ -40,7 +40,6 @@ const AccessControl = () => {
     let ws;
     if (user && user.role === 'admin') {
       
-      // ✅ UPDATED: Dynamic WebSocket URL
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       ws = new WebSocket(`${protocol}//${window.location.host}/ws/admin/notifications/`);
       

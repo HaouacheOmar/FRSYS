@@ -40,14 +40,23 @@ DEBUG = env_bool('DEBUG', False)
 
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', '').split(',') if host.strip()]
 if not ALLOWED_HOSTS and DEBUG:
-    ALLOWED_HOSTS = ['localhost', '127.0.0.1','192.168.1.0']
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1','192.168.1.104','192.168.1.107','192.168.1.108','192.168.1.105']
 
-# CORS settings for React frontend
-CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5173').split(',') if origin.strip()]
+
+# CORS settings for React frontend and WebSocket
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://192.168.1.104:3000",
+    "http://192.168.1.105:8000",
+]
 CORS_ALLOW_CREDENTIALS = True
 
 # CSRF settings
-CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv('CSRF_TRUSTED_ORIGINS', 'http://localhost:3000,http://localhost:5173').split(',') if origin.strip()]
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://192.168.1.104:3000",
+    "http://192.168.1.105:8000",
+]
 CSRF_COOKIE_SECURE = env_bool('CSRF_COOKIE_SECURE', False)
 
 
