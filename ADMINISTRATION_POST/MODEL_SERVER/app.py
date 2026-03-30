@@ -8,6 +8,8 @@ from services.face_recognition import FaceRecognitionService
 import io
 from PIL import Image
 import logging
+import os
+import requests
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -25,13 +27,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize face recognition service
-# Update DB_PATH to your actual face database location
-DB_PATH = r"C:\Users\youne\OneDrive\Desktop\test_photos"
+DEFAULT_DB_PATH = r""
 
+def resolve_db_path():
+    django_url = os.environ.get("DJANGO_SERVER_URL", "http://127.0.0.1:8000").rstrip("/")
+    endpoint = f"{django_url}/api/config/photo-path/"
+    try:
+        resp = requests.get(endpoint, timeout=2.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, dict):
+                path = data.get("dir_path_photo")
+                if path:
+                    return path
+    except Exception as exc:
+        logger.debug(f"Could not fetch DB path from Django ({endpoint}): {exc}")
+    return DEFAULT_DB_PATH
+
+
+DB_PATH = resolve_db_path()
+
+# Initialize face recognition service after resolving DB path
 face_service = FaceRecognitionService(
     db_path=DB_PATH,
-    model_name="buffalo_l" # Replaced Facenet512
+    model_name="buffalo_l"
 )
 
 @app.get("/")
