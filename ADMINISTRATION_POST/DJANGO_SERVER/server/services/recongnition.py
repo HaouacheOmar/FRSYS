@@ -26,11 +26,7 @@ THRESHOLD = 0.45  # Cosine similarity threshold
 
 
 def get_face_db_path():
-    """Return the configured face DB path.
 
-    Priority: `Config.dir_path_photo` (DB) -> `settings.FACE_DB_PATH` -> env var -> None
-    """
-    # Try DB-configured path first
     try:
         cfg = Config.objects.first()
         if cfg and cfg.dir_path_photo:
