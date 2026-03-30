@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import AccessGrantToken, GuestPresence, UserRole
+from .models import AccessGrantToken, GuestPresence, UserRole, Config
 
 
 @admin.register(UserRole)
@@ -21,3 +21,10 @@ class GuestPresenceAdmin(admin.ModelAdmin):
 	list_display = ('user', 'is_online', 'connection_count', 'last_seen', 'updated_at')
 	list_filter = ('is_online',)
 	search_fields = ('user__username',)
+
+
+@admin.register(Config)
+class ConfigAdmin(admin.ModelAdmin):
+    list_display = ('dir_path_photo', 'updated_at')
+    readonly_fields = ('updated_at',)
+    search_fields = ('dir_path_photo',)

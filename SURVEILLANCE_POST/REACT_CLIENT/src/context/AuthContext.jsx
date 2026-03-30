@@ -24,11 +24,10 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    const socket = new WebSocket(
-      process.env.REACT_APP_WS_URL
-        ? `${process.env.REACT_APP_WS_URL}/ws/presence/guest/`
-        : 'ws://192.168.1.105:8000/ws/presence/guest/'
-    );
+    console.log('Vite env object:', import.meta.env);
+    const wsBase = import.meta.env.VITE_WS_URL || (typeof window !== 'undefined' && window.REACT_APP_WS_URL);
+    console.log('Connecting to guest presence WebSocket at:', wsBase);
+    const socket = new WebSocket(`${wsBase.replace(/\/$/, '')}/ws/presence/guest/`);
     socket.onopen = () => {
       socket.send(JSON.stringify({ type: 'ping' }));
     };

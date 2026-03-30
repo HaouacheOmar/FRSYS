@@ -190,9 +190,10 @@ STATIC_URL = 'static/'
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Base directory where person photo folders live (one sub-folder per matricule).
-# e.g.  C:\Users\youne\OneDrive\Desktop\test_photos
-PHOTOS_BASE_DIR = os.getenv('PHOTOS_BASE_DIR', '').strip()
+
+
+
+
 
 # Keep CORS narrow by default; allow all only when explicitly set.
 CORS_ALLOW_ALL_ORIGINS = env_bool('CORS_ALLOW_ALL_ORIGINS', False)

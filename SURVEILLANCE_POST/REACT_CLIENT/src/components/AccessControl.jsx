@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { authAPI } from '../services/api';
+import { authAPI, configAPI } from '../services/api';
 import { useLang } from '../context/LangContext';
 import '../styles/GuestCards.css';
 import userSvg from '../assets/users-svgrepo-com.svg';
@@ -22,6 +22,8 @@ const AccessControl = () => {
   const [guestForm, setGuestForm] = useState({ username: '', password: '' });
   const [editingGuestId, setEditingGuestId] = useState(null);
   const [editForm, setEditForm] = useState({ username: '', password: '', is_active: true });
+  const [photoPath, setPhotoPath] = useState('');
+  const [zipFile, setZipFile] = useState(null);
 
   const wsRef = useRef(null);
 
@@ -78,6 +80,13 @@ const AccessControl = () => {
 
   useEffect(() => {
     loadGuests();
+    // load configured photo path
+    (async () => {
+      try {
+        const res = await configAPI.getPhotoPath();
+        setPhotoPath(res.dir_path_photo || '');
+      } catch {}
+    })();
   }, []);
 
   const onIssueToken = async (event) => {
@@ -164,6 +173,33 @@ const AccessControl = () => {
       await loadGuests();
     } catch (err) {
       setError(err.message || T.failedDeleteGuest);
+    }
+  };
+
+  const onSavePhotoPath = async (ev) => {
+    ev && ev.preventDefault();
+    setError('');
+    setMessage('');
+    try {
+      const res = await configAPI.setPhotoPath(photoPath);
+      setPhotoPath(res.dir_path_photo || '');
+      setMessage(T.configSaved || 'Saved');
+    } catch (err) {
+      setError(err.message || 'Failed to save');
+    }
+  };
+
+  const onUploadZip = async (ev) => {
+    ev && ev.preventDefault();
+    if (!zipFile) return setError('No file selected');
+    setError('');
+    setMessage('');
+    try {
+      const res = await configAPI.uploadPhotoZip(zipFile);
+      setPhotoPath(res.dir_path_photo || '');
+      setMessage(T.configSaved || 'Uploaded and extracted');
+    } catch (err) {
+      setError(err.message || 'Failed to upload');
     }
   };
 
@@ -354,6 +390,21 @@ const AccessControl = () => {
               })}
           </div>
         )}
+      </div>
+
+      <div className="form-container">
+        <h2>{T.photoDirectoryConfig || 'Photo Directory'}</h2>
+        <div className="form-group">
+          <label>{T.photoDirectoryPath || 'Configured path'}</label>
+          <input type="text" value={photoPath} onChange={(e) => setPhotoPath(e.target.value)} />
+          <button type="button" className="connect-btn" onClick={onSavePhotoPath}>{T.save || 'Save'}</button>
+        </div>
+
+        <div className="form-group">
+          <label>{T.uploadZip || 'Upload photos ZIP'}</label>
+          <input type="file" accept=".zip" onChange={(e) => setZipFile(e.target.files[0] || null)} />
+          <button type="button" className="connect-btn" onClick={onUploadZip}>{T.upload || 'Upload'}</button>
+        </div>
       </div>
     </div>
   );

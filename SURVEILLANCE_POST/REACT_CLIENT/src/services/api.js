@@ -192,6 +192,24 @@ export const statusAPI = {
   check: () => apiFetch(`${API_BASE_URL}/status/`).then(handleResponse),
 };
 
+// Config API for face-photo directory
+export const configAPI = {
+  getPhotoPath: () => apiFetch(`${API_BASE_URL}/config/photo-path/`).then(handleResponse),
+  setPhotoPath: (dirPath) => apiFetch(`${API_BASE_URL}/config/photo-path/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dir_path: dirPath }),
+  }).then(handleResponse),
+  uploadPhotoZip: (file) => {
+    const formData = new FormData();
+    formData.append('zip', file);
+    return apiFetch(`${API_BASE_URL}/config/photo-path/`, {
+      method: 'POST',
+      body: formData,
+    }).then(handleResponse);
+  },
+};
+
 export const authAPI = {
   login: (payload) => apiFetch(`${API_BASE_URL}/auth/login/`, {
     method: 'POST',
