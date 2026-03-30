@@ -347,15 +347,8 @@ class FaceRecognitionService:
         logger.info(f"Database path: {db_path}")
 
     def _load_database(self):
-        """Extract and cache embeddings from the image directory (supports subfolders).
+        """Extract and cache embeddings from the image directory 
 
-        Behavior:
-        - If images are in the DB root, each filename's stem becomes the identity.
-        - If images are inside subfolders, the first-level subfolder name is used
-          as the identity and all images inside that folder will be associated
-          with that identity.
-        The loader caches a list of embeddings per identity (allows multiple
-        reference images per person).
         """
         logger.info("Loading face database into memory...")
         for root, dirs, files in os.walk(self.db_path):

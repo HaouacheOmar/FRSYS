@@ -21,6 +21,13 @@ from .serializers import (
     RentreeSerializer
 )
 from .permissions import IsAdminOrGuestReadOnly, IsAdminRole
+from .models import Config
+import zipfile
+import io
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from rest_framework.response import Response
 
 
 def video_stream_view(request):
@@ -48,19 +55,78 @@ def api_status(request):
     })
 
 
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated, IsAdminRole])
+def config_photo_path_view(request):
+    """Get or set the configured face-photos folder.
+
+    POST accepts either:
+    - JSON/body field `dir_path` to set an absolute path, or
+    - multipart file field `zip` containing a ZIP archive which will be
+      extracted under `settings.PHOTOS_BASE_DIR` (or FACE_DB_PATH) and the
+      extracted folder path saved.
+    """
+    if request.method == 'GET':
+        cfg = Config.objects.first()
+        return Response({'dir_path_photo': cfg.dir_path_photo if cfg and cfg.dir_path_photo else ''})
+
+    # POST
+    dir_path = request.data.get('dir_path')
+    uploaded_zip = request.FILES.get('zip')
+
+    if not dir_path and not uploaded_zip:
+        return Response({'message': 'Provide dir_path or upload zip file.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Prefer dir_path if provided
+    if dir_path:
+        path = str(dir_path).strip()
+        if not path:
+            return Response({'message': 'dir_path is empty.'}, status=status.HTTP_400_BAD_REQUEST)
+        cfg = Config.objects.first()
+        if cfg:
+            cfg.dir_path_photo = path
+            cfg.save()
+        else:
+            Config.objects.create(dir_path_photo=path)
+        return Response({'dir_path_photo': path})
+
+    # Handle uploaded zip
+    try:
+        base = getattr(settings, 'PHOTOS_BASE_DIR', '') or getattr(settings, 'FACE_DB_PATH', '') or os.getcwd()
+        target_root = os.path.abspath(base)
+        # create a timestamped folder
+        import datetime
+        folder_name = f"photos_{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+        target_dir = os.path.join(target_root, folder_name)
+        os.makedirs(target_dir, exist_ok=True)
+
+        # Read zip into memory and extract
+        z = zipfile.ZipFile(uploaded_zip)
+        z.extractall(target_dir)
+
+        cfg = Config.objects.first()
+        if cfg:
+            cfg.dir_path_photo = target_dir
+            cfg.save()
+        else:
+            Config.objects.create(dir_path_photo=target_dir)
+
+        return Response({'dir_path_photo': target_dir})
+    except Exception as exc:
+        return Response({'message': f'Failed to extract zip: {exc}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 
 class CompagnieViewSet(viewsets.ModelViewSet):
     """
-    API endpoint for managing companies.
     
-    Provides CRUD operations:
-    - GET /api/compagnies/ - List all companies
-    - POST /api/compagnies/ - Create new company
-    - GET /api/compagnies/{id}/ - Retrieve specific company
-    - PUT /api/compagnies/{id}/ - Update company
-    - PATCH /api/compagnies/{id}/ - Partial update
-    - DELETE /api/compagnies/{id}/ - Delete company
+    - get /api/compagnies/ - List all companies
+    - post /api/compagnies/ - Create new company
+    - get /api/compagnies/{id}/ - Retrieve specific company
+    - put /api/compagnies/{id}/ - Update company
+    - patch /api/compagnies/{id}/ - Partial update
+    - del /api/compagnies/{id}/ - Delete company
     """
     queryset = Compagnie.objects.all()
     serializer_class = CompagnieSerializer
@@ -153,7 +219,6 @@ class PersonViewSet(viewsets.ModelViewSet):
     def rentrees(self, request, pk=None):
         """Get all return events for this person."""
         person = self.get_object()
-        # Optimize: eager load all related data
         rentrees = Rentree.objects.filter(person=person).select_related(
             'person__compagnie',
             'spectacle__person__compagnie'

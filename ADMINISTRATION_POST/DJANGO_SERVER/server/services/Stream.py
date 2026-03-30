@@ -11,8 +11,6 @@ except Exception:
 from .recongnition import process_frame
 
 
-# Stream configuration
-# rtsp url can be provided explicitly or resolved from the database at runtime
 RTSP_URL = None
 PROCESS_SCALE = 1.0
 IDLE_SLEEP_SEC = 0.005

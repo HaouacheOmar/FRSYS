@@ -34,6 +34,7 @@ urlpatterns = [
     # Traditional views
     path('video-stream/', views.video_stream_view, name='video_stream'),
     path('api/status/', views.api_status, name='api_status'),
+    path('api/config/photo-path/', views.config_photo_path_view, name='config-photo-path'),
     
     # Compagnie endpoints
     path('api/compagnies/', views.CompagnieViewSet.as_view({'get': 'list', 'post': 'create'}), name='compagnie-list'),
