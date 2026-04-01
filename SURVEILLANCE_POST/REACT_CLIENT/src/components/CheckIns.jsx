@@ -12,9 +12,11 @@ const CheckIns = () => {
   const [error, setError] = useState('');
   const wsRef = useRef(null);
 
-  // ✅ UPDATED: Dynamic WebSocket URL
+  // Dynamic WebSocket URL via Vite env or backend fallback
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const WS_URL = `${protocol}//${window.location.host}/ws/video/stream/`;
+  const defaultWsHost = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
+  const WS_BASE = import.meta.env.VITE_WS_URL || defaultWsHost;
+  const WS_URL = `${WS_BASE.replace(/\/$/, '')}/ws/video/stream/`;
 
   const updateStatus = (state, message) => {
     setStatus({ state, message });

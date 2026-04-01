@@ -258,7 +258,7 @@ const Cameras = () => {
               <h3>{camera.model_name}</h3>
               <p><strong>{T.ipLabel}:</strong> {camera.ip_address}</p>
               {camera.username && <p><strong>{T.userLabel}:</strong> {camera.username}</p>}
-              <p className="rtsp-url-display"><strong>{T.rtspLabel}:</strong> <code>{buildRtspUrl(camera)}</code></p>
+              <p className="rtsp-url-display"><strong>{T.rtspLabel}:</strong> <code>{camera.rtsp_url || buildRtspUrl(camera)}</code></p>
               <p>
                 <strong>{T.streamLabel}:</strong>{' '}
                 {(() => {

@@ -28,6 +28,10 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from rest_framework.response import Response
+import urllib.parse
+import subprocess
+import tempfile
+import os
 
 
 def video_stream_view(request):
@@ -375,6 +379,55 @@ def _probe_camera(camera):
     t.start()
     t.join(timeout=5)
     return result['online'], rtsp_url
+    import threading
+    rtsp_url = _build_rtsp_url(camera)
+    result = {'online': False}
+
+    def _try_opencv():
+        try:
+            import cv2
+            # prefer FFMPEG backend when available
+            try:
+                cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+            except Exception:
+                cap = cv2.VideoCapture(rtsp_url)
+            if cap.isOpened():
+                ret, _ = cap.read()
+                result['online'] = bool(ret)
+            cap.release()
+        except Exception:
+            result['online'] = False
+
+    # First try OpenCV with timeout
+    t = threading.Thread(target=_try_opencv, daemon=True)
+    t.start()
+    t.join(timeout=6)
+    if result['online']:
+        return True, rtsp_url
+
+    # Fallback: try calling ffmpeg to grab one frame (uses TCP transport to avoid UDP blocking)
+    try:
+        tmpdir = tempfile.gettempdir()
+        out_path = os.path.join(tmpdir, f"probe_{camera.id}_{int(os.getpid())}.jpg")
+        # Build ffmpeg command
+        cmd = [
+            'ffmpeg',
+            '-rtsp_transport', 'tcp',
+            '-i', rtsp_url,
+            '-t', '2',
+            '-frames:v', '1',
+            '-y', out_path
+        ]
+        proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
+        ok = proc.returncode == 0 and os.path.exists(out_path) and os.path.getsize(out_path) > 0
+        try:
+            if os.path.exists(out_path):
+                os.remove(out_path)
+        except Exception:
+            pass
+        return bool(ok), rtsp_url
+    except Exception:
+        return False, rtsp_url
 
 
 class SpectacleViewSet(viewsets.ModelViewSet):

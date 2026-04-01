@@ -16,6 +16,7 @@ const VideoStream = () => {
   const [faceCount, setFaceCount] = useState(0);
   const [detections, setDetections] = useState([]);
   const [error, setError] = useState('');
+  const [frameSrc, setFrameSrc] = useState(null);
 
   // frame counting for fps calculation
   const [frameCount, setFrameCount] = useState(0);
@@ -24,9 +25,12 @@ const VideoStream = () => {
   // refs to keep websocket instance between renders
   const wsRef = useRef(null);
 
-  // build ws url: use secure ws on https, otherwise ws
+  // build ws url: in dev use same-origin (Vite proxy), in production use configured backend
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const WS_URL = `${protocol}//${window.location.host}/ws/video/stream/`;
+  const sameOriginWsBase = `${protocol}//${window.location.host}`;
+  const configuredWsBase = import.meta.env.VITE_WS_URL || '';
+  const WS_BASE = import.meta.env.DEV ? sameOriginWsBase : configuredWsBase || sameOriginWsBase;
+  const WS_URL = `${WS_BASE.replace(/\/$/, '')}/ws/video/stream/`;
 
   // update connection status text shown in the ui
   const updateStatus = (state, message) => {
@@ -86,11 +90,10 @@ const VideoStream = () => {
     }
   };
 
-  // set the image element src to the base64 jpeg from server
+  // set frame data for render
   const displayFrame = (data) => {
-    const img = document.getElementById('videoFrame');
-    if (img) {
-      img.src = 'data:image/jpeg;base64,' + data.image;
+    if (data?.image) {
+      setFrameSrc('data:image/jpeg;base64,' + data.image);
     }
   };
 
@@ -145,6 +148,7 @@ const VideoStream = () => {
         updateStatus('disconnected', T.disconnected);
         wsRef.current = null;
         setWs(null);
+        setFrameSrc(null);
       };
 
       wsRef.current = websocket;
@@ -263,7 +267,7 @@ const VideoStream = () => {
       </div>
 
       <div className="video-container">
-        <img id="videoFrame" src="" alt={T.videoStreamTitle} />
+        <img id="videoFrame" src={frameSrc || undefined} alt={T.videoStreamTitle} />
       </div>
 
       <div className="info">
