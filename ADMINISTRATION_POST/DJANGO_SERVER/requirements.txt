@@ -1,0 +1,15 @@
+Django>=5.0,<6.1
+channels>=4.1,<5
+daphne>=4.1,<5
+django-cors-headers>=4.3
+djangorestframework>=3.15
+django-filter>=24.2
+djangorestframework-simplejwt>=5.3
+psycopg2-binary>=2.9
+python-dotenv>=1.0
+pandas>=2.2
+opencv-python-headless>=4.9
+numpy>=1.24
+requests>=2.31
+cryptography>=42.0
+Pillow>=10.0

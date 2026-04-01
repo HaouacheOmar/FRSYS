@@ -328,6 +328,7 @@ class FaceRecognitionService:
         self.model_name = model_name
         self.threshold = threshold
         self.known_faces = {}
+        print('dbpqth : ',db_path)
         
         # Verify database path exists
         if not os.path.exists(db_path):

@@ -43,7 +43,9 @@ const AccessControl = () => {
     if (user && user.role === 'admin') {
       
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      ws = new WebSocket(`${protocol}//${window.location.host}/ws/admin/notifications/`);
+      const defaultWsHost = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
+      const wsBase = import.meta.env.VITE_WS_URL || defaultWsHost;
+      ws = new WebSocket(`${wsBase.replace(/\/$/, '')}/ws/admin/notifications/`);
       
       wsRef.current = ws;
       ws.onopen = () => {

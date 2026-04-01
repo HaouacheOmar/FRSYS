@@ -20,17 +20,21 @@ app = FastAPI(title="Face Recognition Model Server", version="1.0.0")
 # CORS configuration - Allow Django server to connect
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000",    "http://192.168.1.104:8000"
+    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000",    "http://192.168.1.104:8000" , 'http://192.168.1.105:8000'
 ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-DEFAULT_DB_PATH = r""
+DEFAULT_DB_PATH = os.environ.get("FACE_DB_PATH", r"C:\Users\youne\OneDrive\Desktop\test_photos")
 
 def resolve_db_path():
-    django_url = os.environ.get("DJANGO_SERVER_URL", "http://127.0.0.1:8000").rstrip("/")
+    # Explicit env path should win in containerized deployments.
+    if os.environ.get("FACE_DB_PATH"):
+        return os.environ.get("FACE_DB_PATH")
+
+    django_url = os.environ.get("DJANGO_SERVER_URL", "http://192.168.1.105:8000").rstrip("/")
     endpoint = f"{django_url}/api/config/photo-path/"
     try:
         resp = requests.get(endpoint, timeout=2.0)
@@ -46,6 +50,8 @@ def resolve_db_path():
 
 
 DB_PATH = resolve_db_path()
+
+logger.info(f"Resolved DB_PATH: {DB_PATH}")
 
 # Initialize face recognition service after resolving DB path
 face_service = FaceRecognitionService(
@@ -186,7 +192,7 @@ if __name__ == "__main__":
     # Run on localhost only (not exposed to network)
     daphne.run(
         app,
-        host="127.0.0.1",  # localhost only for security
+        host="0.0.0.0",  # localhost only for security
         port=5000,
         log_level="info"
     )

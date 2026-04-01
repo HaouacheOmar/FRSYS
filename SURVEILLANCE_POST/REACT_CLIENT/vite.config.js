@@ -6,13 +6,11 @@ export default defineConfig(({ mode }) => {
 
   console.log(`Starting ${env.VITE_APP_NAME || 'React App'}...`)
   
-  // const targetIP = env.VITE_BACKEND_IP || '192.168.1.105' || 'localhost' || '127.0.0.1'
-  const targetIP = '127.0.0.1'
+  const targetIP = env.VITE_BACKEND_IP || '192.168.1.105'
   return {
     plugins: [react()],
     server: {
-      host: '127.0.0.1',
-    
+      host: true,
       port: 3000,
       proxy: {
         '/api': {

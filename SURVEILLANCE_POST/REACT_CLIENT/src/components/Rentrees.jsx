@@ -3,9 +3,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { rentreesAPI, API_BASE_URL, compagniesAPI } from '../services/api';
 import { useLang } from '../context/LangContext';
+import { useAuth } from '../context/AuthContext';
 
 const Rentrees = () => {
   const { T } = useLang();
+  const { role } = useAuth();
+  const isGuest = role === 'guest';
   const [rentrees, setRentrees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -17,8 +20,6 @@ const Rentrees = () => {
   const wsRef = useRef(null);
   const refreshLockRef = useRef(false);
 
-  // websocket url used by this component (local dev default)
-  const WS_URL = 'ws://127.0.0.1:8000/ws/video/stream/';
   const getSocketLabel = (state) => {
     if (state === 'connected') return T.connected;
     if (state === 'connecting') return T.connecting;
@@ -31,8 +32,13 @@ const Rentrees = () => {
   }, [showLateOnly, companyFilter]);
 
   useEffect(() => {
-    loadCompanies();
-  }, []);
+    if (!isGuest) {
+      loadCompanies();
+    } else {
+      setCompanies([]);
+      setCompanyFilter('');
+    }
+  }, [isGuest]);
 
   // cleanup socket on unmount
   useEffect(() => {
@@ -82,7 +88,10 @@ const Rentrees = () => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
 
     setWsState('connecting');
-    const ws = new WebSocket(WS_URL);
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const defaultWsHost = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
+    const WS_BASE = import.meta.env.VITE_WS_URL || defaultWsHost;
+    const ws = new WebSocket(`${WS_BASE.replace(/\/$/, '')}/ws/video/stream/`);
 
     ws.onopen = () => {
       setWsState('connected');
@@ -149,6 +158,7 @@ const Rentrees = () => {
   };
 
   const getMainPhoto = (rentree) => {
+    if (isGuest) return '/main.svg';
     const pid = rentree?.spectacle?.person?.id;
     if (!pid) return '/main.svg';
     return `${API_BASE_URL}/persons/${pid}/main-photo/`;
@@ -187,12 +197,14 @@ const Rentrees = () => {
         <button className="disconnect-btn" onClick={disconnectCamera}>
           {T.stopCameraRecognition}
         </button>
-        <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)} style={{ marginLeft: 10 }}>
-          <option value="">{T.selectCompany}</option>
-          {companies.map((c) => (
-            <option key={c.id} value={c.id}>{c.label}</option>
-          ))}
-        </select>
+        {!isGuest && (
+          <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)} style={{ marginLeft: 10 }}>
+            <option value="">{T.selectCompany}</option>
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>{c.label}</option>
+            ))}
+          </select>
+        )}
         <div className="filter-buttons">
           <button
             className={!showLateOnly ? 'filter-active' : 'filter-btn'}
