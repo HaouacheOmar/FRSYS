@@ -30,10 +30,13 @@ app.add_middleware(
 DEFAULT_DB_PATH = os.environ.get("FACE_DB_PATH", r"C:\Users\youne\OneDrive\Desktop\test_photos")
 
 def resolve_db_path():
+<<<<<<< Updated upstream
     # Explicit env path should win in containerized deployments.
     if os.environ.get("FACE_DB_PATH"):
         return os.environ.get("FACE_DB_PATH")
 
+=======
+>>>>>>> Stashed changes
     django_url = os.environ.get("DJANGO_SERVER_URL", "http://192.168.1.105:8000").rstrip("/")
     endpoint = f"{django_url}/api/config/photo-path/"
     try:

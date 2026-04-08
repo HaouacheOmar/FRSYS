@@ -25,11 +25,18 @@ const VideoStream = () => {
   // refs to keep websocket instance between renders
   const wsRef = useRef(null);
 
+<<<<<<< Updated upstream
   // build ws url: in dev use same-origin (Vite proxy), in production use configured backend
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const sameOriginWsBase = `${protocol}//${window.location.host}`;
   const configuredWsBase = import.meta.env.VITE_WS_URL || '';
   const WS_BASE = import.meta.env.DEV ? sameOriginWsBase : configuredWsBase || sameOriginWsBase;
+=======
+  // build ws url: use Vite env or default backend when frontend runs on port 3000
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const defaultWsHost = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
+  const WS_BASE = import.meta.env.VITE_WS_URL || defaultWsHost;
+>>>>>>> Stashed changes
   const WS_URL = `${WS_BASE.replace(/\/$/, '')}/ws/video/stream/`;
 
   // update connection status text shown in the ui
