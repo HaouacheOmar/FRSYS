@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { authAPI } from '../services/api';
+import { authAPI, configAPI } from '../services/api';
 import { useLang } from '../context/LangContext';
 import '../styles/GuestCards.css';
 import userSvg from '../assets/users-svgrepo-com.svg';
@@ -22,6 +22,8 @@ const AccessControl = () => {
   const [guestForm, setGuestForm] = useState({ username: '', password: '' });
   const [editingGuestId, setEditingGuestId] = useState(null);
   const [editForm, setEditForm] = useState({ username: '', password: '', is_active: true });
+  const [photoPath, setPhotoPath] = useState('');
+  const [zipFile, setZipFile] = useState(null);
 
   const wsRef = useRef(null);
 
@@ -35,10 +37,16 @@ const AccessControl = () => {
   };
 
   // Real-time: handle guest online/offline events
+// Real-time: handle guest online/offline events
   useEffect(() => {
     let ws;
     if (user && user.role === 'admin') {
-      ws = new WebSocket('ws://localhost:8000/ws/admin/notifications/');
+      
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const defaultWsHost = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
+      const wsBase = import.meta.env.VITE_WS_URL || defaultWsHost;
+      ws = new WebSocket(`${wsBase.replace(/\/$/, '')}/ws/admin/notifications/`);
+      
       wsRef.current = ws;
       ws.onopen = () => {
         ws.send(JSON.stringify({ type: 'ping' }));
@@ -48,7 +56,6 @@ const AccessControl = () => {
           const data = JSON.parse(event.data);
           if (data.type !== 'admin_notification') return;
           if (data.event === 'guest_snapshot') {
-            // Update only online status for guests in the list
             const onlineMap = {};
             (data.payload?.online_guests || []).forEach(g => { onlineMap[g.username] = true; });
             setGuests(prev => prev.map(g => ({ ...g, is_online: !!onlineMap[g.username] })));
@@ -73,9 +80,15 @@ const AccessControl = () => {
   }, [user]);
 
 
-
   useEffect(() => {
     loadGuests();
+    // load configured photo path
+    (async () => {
+      try {
+        const res = await configAPI.getPhotoPath();
+        setPhotoPath(res.dir_path_photo || '');
+      } catch {}
+    })();
   }, []);
 
   const onIssueToken = async (event) => {
@@ -162,6 +175,33 @@ const AccessControl = () => {
       await loadGuests();
     } catch (err) {
       setError(err.message || T.failedDeleteGuest);
+    }
+  };
+
+  const onSavePhotoPath = async (ev) => {
+    ev && ev.preventDefault();
+    setError('');
+    setMessage('');
+    try {
+      const res = await configAPI.setPhotoPath(photoPath);
+      setPhotoPath(res.dir_path_photo || '');
+      setMessage(T.configSaved || 'Saved');
+    } catch (err) {
+      setError(err.message || 'Failed to save');
+    }
+  };
+
+  const onUploadZip = async (ev) => {
+    ev && ev.preventDefault();
+    if (!zipFile) return setError('No file selected');
+    setError('');
+    setMessage('');
+    try {
+      const res = await configAPI.uploadPhotoZip(zipFile);
+      setPhotoPath(res.dir_path_photo || '');
+      setMessage(T.configSaved || 'Uploaded and extracted');
+    } catch (err) {
+      setError(err.message || 'Failed to upload');
     }
   };
 
@@ -352,6 +392,21 @@ const AccessControl = () => {
               })}
           </div>
         )}
+      </div>
+
+      <div className="form-container">
+        <h2>{T.photoDirectoryConfig || 'Photo Directory'}</h2>
+        <div className="form-group">
+          <label>{T.photoDirectoryPath || 'Configured path'}</label>
+          <input type="text" value={photoPath} onChange={(e) => setPhotoPath(e.target.value)} />
+          <button type="button" className="connect-btn" onClick={onSavePhotoPath}>{T.save || 'Save'}</button>
+        </div>
+
+        <div className="form-group">
+          <label>{T.uploadZip || 'Upload photos ZIP'}</label>
+          <input type="file" accept=".zip" onChange={(e) => setZipFile(e.target.files[0] || null)} />
+          <button type="button" className="connect-btn" onClick={onUploadZip}>{T.upload || 'Upload'}</button>
+        </div>
       </div>
     </div>
   );

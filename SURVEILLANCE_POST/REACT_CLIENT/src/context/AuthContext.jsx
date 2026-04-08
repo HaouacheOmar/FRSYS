@@ -24,7 +24,13 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    const socket = new WebSocket('ws://localhost:8000/ws/presence/guest/');
+    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const sameOriginWsBase = typeof window !== 'undefined' ? `${protocol}//${window.location.host}` : '';
+    const configuredWsBase = import.meta.env.VITE_WS_URL || (typeof window !== 'undefined' && window.REACT_APP_WS_URL) || '';
+    const wsBase = import.meta.env.DEV ? sameOriginWsBase : configuredWsBase || sameOriginWsBase;
+
+    console.log('Connecting to guest presence WebSocket at:', wsBase);
+    const socket = new WebSocket(`${wsBase.replace(/\/$/, '')}/ws/presence/guest/`);
     socket.onopen = () => {
       socket.send(JSON.stringify({ type: 'ping' }));
     };
@@ -37,6 +43,8 @@ export const AuthProvider = ({ children }) => {
 
   const loadCurrentUser = async () => {
     try {
+      // Bootstrap auth from refresh token first to avoid noisy /me 401 on cold starts.
+      await authAPI.refresh();
       const payload = await authAPI.me();
       setUser(payload?.user || null);
     } catch {

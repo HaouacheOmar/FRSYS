@@ -21,6 +21,17 @@ from .serializers import (
     RentreeSerializer
 )
 from .permissions import IsAdminOrGuestReadOnly, IsAdminRole
+from .models import Config
+import zipfile
+import io
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework import status
+from rest_framework.response import Response
+import urllib.parse
+import subprocess
+import tempfile
+import os
 
 
 def video_stream_view(request):
@@ -48,19 +59,78 @@ def api_status(request):
     })
 
 
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated, IsAdminRole])
+def config_photo_path_view(request):
+    """Get or set the configured face-photos folder.
+
+    POST accepts either:
+    - JSON/body field `dir_path` to set an absolute path, or
+    - multipart file field `zip` containing a ZIP archive which will be
+      extracted under `settings.PHOTOS_BASE_DIR` (or FACE_DB_PATH) and the
+      extracted folder path saved.
+    """
+    if request.method == 'GET':
+        cfg = Config.objects.first()
+        return Response({'dir_path_photo': cfg.dir_path_photo if cfg and cfg.dir_path_photo else ''})
+
+    # POST
+    dir_path = request.data.get('dir_path')
+    uploaded_zip = request.FILES.get('zip')
+
+    if not dir_path and not uploaded_zip:
+        return Response({'message': 'Provide dir_path or upload zip file.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Prefer dir_path if provided
+    if dir_path:
+        path = str(dir_path).strip()
+        if not path:
+            return Response({'message': 'dir_path is empty.'}, status=status.HTTP_400_BAD_REQUEST)
+        cfg = Config.objects.first()
+        if cfg:
+            cfg.dir_path_photo = path
+            cfg.save()
+        else:
+            Config.objects.create(dir_path_photo=path)
+        return Response({'dir_path_photo': path})
+
+    # Handle uploaded zip
+    try:
+        base = getattr(settings, 'PHOTOS_BASE_DIR', '') or getattr(settings, 'FACE_DB_PATH', '') or os.getcwd()
+        target_root = os.path.abspath(base)
+        # create a timestamped folder
+        import datetime
+        folder_name = f"photos_{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+        target_dir = os.path.join(target_root, folder_name)
+        os.makedirs(target_dir, exist_ok=True)
+
+        # Read zip into memory and extract
+        z = zipfile.ZipFile(uploaded_zip)
+        z.extractall(target_dir)
+
+        cfg = Config.objects.first()
+        if cfg:
+            cfg.dir_path_photo = target_dir
+            cfg.save()
+        else:
+            Config.objects.create(dir_path_photo=target_dir)
+
+        return Response({'dir_path_photo': target_dir})
+    except Exception as exc:
+        return Response({'message': f'Failed to extract zip: {exc}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 
 
 class CompagnieViewSet(viewsets.ModelViewSet):
     """
-    API endpoint for managing companies.
     
-    Provides CRUD operations:
-    - GET /api/compagnies/ - List all companies
-    - POST /api/compagnies/ - Create new company
-    - GET /api/compagnies/{id}/ - Retrieve specific company
-    - PUT /api/compagnies/{id}/ - Update company
-    - PATCH /api/compagnies/{id}/ - Partial update
-    - DELETE /api/compagnies/{id}/ - Delete company
+    - get /api/compagnies/ - List all companies
+    - post /api/compagnies/ - Create new company
+    - get /api/compagnies/{id}/ - Retrieve specific company
+    - put /api/compagnies/{id}/ - Update company
+    - patch /api/compagnies/{id}/ - Partial update
+    - del /api/compagnies/{id}/ - Delete company
     """
     queryset = Compagnie.objects.all()
     serializer_class = CompagnieSerializer
@@ -153,7 +223,6 @@ class PersonViewSet(viewsets.ModelViewSet):
     def rentrees(self, request, pk=None):
         """Get all return events for this person."""
         person = self.get_object()
-        # Optimize: eager load all related data
         rentrees = Rentree.objects.filter(person=person).select_related(
             'person__compagnie',
             'spectacle__person__compagnie'
@@ -191,17 +260,14 @@ class PersonViewSet(viewsets.ModelViewSet):
 
 class CameraViewSet(viewsets.ModelViewSet):
     """
-    API endpoint for managing cameras.
+    - get /api/cameras/ -  all cameras
+    - post /api/cameras/ -  new camera
+    - get /api/cameras/{id}/ -  specific camera
+    - put /api/cameras/{id}/ - update camera
+    - patch /api/cameras/{id}/ - part update
+    - del /api/cameras/{id}/ - del camera
     
-    Provides CRUD operations:
-    - GET /api/cameras/ - List all cameras
-    - POST /api/cameras/ - Create new camera
-    - GET /api/cameras/{id}/ - Retrieve specific camera
-    - PUT /api/cameras/{id}/ - Update camera
-    - PATCH /api/cameras/{id}/ - Partial update
-    - DELETE /api/cameras/{id}/ - Delete camera
-    
-    Filters:
+    filt:
     - ?is_active={true/false} - Filter by active status
     - ?search={query} - Search in model_name, ip_address
     """
@@ -313,19 +379,66 @@ def _probe_camera(camera):
     t.start()
     t.join(timeout=5)
     return result['online'], rtsp_url
+    import threading
+    rtsp_url = _build_rtsp_url(camera)
+    result = {'online': False}
+
+    def _try_opencv():
+        try:
+            import cv2
+            # prefer FFMPEG backend when available
+            try:
+                cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+            except Exception:
+                cap = cv2.VideoCapture(rtsp_url)
+            if cap.isOpened():
+                ret, _ = cap.read()
+                result['online'] = bool(ret)
+            cap.release()
+        except Exception:
+            result['online'] = False
+
+    # First try OpenCV with timeout
+    t = threading.Thread(target=_try_opencv, daemon=True)
+    t.start()
+    t.join(timeout=6)
+    if result['online']:
+        return True, rtsp_url
+
+    # Fallback: try calling ffmpeg to grab one frame (uses TCP transport to avoid UDP blocking)
+    try:
+        tmpdir = tempfile.gettempdir()
+        out_path = os.path.join(tmpdir, f"probe_{camera.id}_{int(os.getpid())}.jpg")
+        # Build ffmpeg command
+        cmd = [
+            'ffmpeg',
+            '-rtsp_transport', 'tcp',
+            '-i', rtsp_url,
+            '-t', '2',
+            '-frames:v', '1',
+            '-y', out_path
+        ]
+        proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
+        ok = proc.returncode == 0 and os.path.exists(out_path) and os.path.getsize(out_path) > 0
+        try:
+            if os.path.exists(out_path):
+                os.remove(out_path)
+        except Exception:
+            pass
+        return bool(ok), rtsp_url
+    except Exception:
+        return False, rtsp_url
 
 
 class SpectacleViewSet(viewsets.ModelViewSet):
     """
-    API endpoint for managing outing records (spectacles).
     
-    Provides CRUD operations:
-    - GET /api/spectacles/ - List all outings
-    - POST /api/spectacles/ - Create new outing
-    - GET /api/spectacles/{id}/ - Retrieve specific outing
-    - PUT /api/spectacles/{id}/ - Update outing
-    - PATCH /api/spectacles/{id}/ - Partial update
-    - DELETE /api/spectacles/{id}/ - Delete outing
+    - get /api/spectacles/ -  all outings
+    - post /api/spectacles/ -  new outing
+    - get /api/spectacles/{id}/ -  specific outing
+    - put /api/spectacles/{id}/ - update outing
+    - patch /api/spectacles/{id}/ - part update
+    - del /api/spectacles/{id}/ - del outing
     
     Filters:
     - ?person={id} - Filter by person
@@ -358,9 +471,9 @@ class SpectacleViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         """
-        Supports 2 modes:
-        1) Default JSON create (existing behavior)
-        2) Excel bulk import when a file is sent in request.FILES["file"] or ["excel"]
+         2 modes:
+        1) default JSON create
+        2) excel bulk import when a file is sent in request.FILES["file"] or ["excel"]
         """
         excel_file = request.FILES.get("file") or request.FILES.get("excel")
         if not excel_file:
@@ -520,18 +633,16 @@ class SpectacleViewSet(viewsets.ModelViewSet):
 
 class RentreeViewSet(viewsets.ModelViewSet):
     """
-    API endpoint for managing return events.
     
-    Provides CRUD operations:
-    - GET /api/rentrees/ - List all return events
-    - POST /api/rentrees/ - Create new return event
-    - GET /api/rentrees/{id}/ - Retrieve specific return event
-    - PUT /api/rentrees/{id}/ - Update return event
-    - PATCH /api/rentrees/{id}/ - Partial update
-    - DELETE /api/rentrees/{id}/ - Delete return event
+    - get /api/rentrees/ -  all return tolab
+    - post /api/rentrees/ -  new return taleb
+    - get /api/rentrees/{id}/ -  specific return taleb
+    - put /api/rentrees/{id}/ - update return taleb
+    - patch /api/rentrees/{id}/ - part update
+    - del /api/rentrees/{id}/ - delt return taleb
     
-    Filters:
-    - ?person={id} - Filter by person
+    filt:
+    - ?person={id} - Filter by taleb
     - ?spectacle={id} - Filter by outing
     - ?est_retard={true/false} - Filter by late status
     """

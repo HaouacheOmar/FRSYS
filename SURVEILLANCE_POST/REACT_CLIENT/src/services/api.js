@@ -1,5 +1,5 @@
-// API service for backend communication
-export const API_BASE_URL = 'http://localhost:8000/api';
+
+export const API_BASE_URL = '/api';
 
 const CSRF_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 let csrfFetchPromise = null;
@@ -77,7 +77,11 @@ export const compagniesAPI = {
 
 // Persons API
 export const personsAPI = {
-  list: () => apiFetch(`${API_BASE_URL}/persons/`).then(handleResponse),
+  // accept optional params object to build query string, e.g. { compagnie: 1 }
+  list: (params = {}) => {
+    const qs = params && Object.keys(params).length ? `?${new URLSearchParams(params).toString()}` : '';
+    return apiFetch(`${API_BASE_URL}/persons/${qs}`).then(handleResponse);
+  },
   create: (data) => apiFetch(`${API_BASE_URL}/persons/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -125,7 +129,11 @@ export const camerasAPI = {
 
 // Spectacles API
 export const spectaclesAPI = {
-  list: () => apiFetch(`${API_BASE_URL}/spectacles/`).then(handleResponse),
+  // optional params allowed (client can filter client-side if backend lacks support)
+  list: (params = {}) => {
+    const qs = params && Object.keys(params).length ? `?${new URLSearchParams(params).toString()}` : '';
+    return apiFetch(`${API_BASE_URL}/spectacles/${qs}`).then(handleResponse);
+  },
   pending: () => apiFetch(`${API_BASE_URL}/spectacles/pending/`).then(handleResponse),
   completed: () => apiFetch(`${API_BASE_URL}/spectacles/completed/`).then(handleResponse),
   importExcel: (file) => {
@@ -157,7 +165,11 @@ export const spectaclesAPI = {
 
 // Rentrees API
 export const rentreesAPI = {
-  list: () => apiFetch(`${API_BASE_URL}/rentrees/`).then(handleResponse),
+  // optional params supported; component may filter client-side by company
+  list: (params = {}) => {
+    const qs = params && Object.keys(params).length ? `?${new URLSearchParams(params).toString()}` : '';
+    return apiFetch(`${API_BASE_URL}/rentrees/${qs}`).then(handleResponse);
+  },
   lateReturns: () => apiFetch(`${API_BASE_URL}/rentrees/late_returns/`).then(handleResponse),
   create: (data) => apiFetch(`${API_BASE_URL}/rentrees/`, {
     method: 'POST',
@@ -178,6 +190,24 @@ export const rentreesAPI = {
 // Status API
 export const statusAPI = {
   check: () => apiFetch(`${API_BASE_URL}/status/`).then(handleResponse),
+};
+
+// Config API for face-photo directory
+export const configAPI = {
+  getPhotoPath: () => apiFetch(`${API_BASE_URL}/config/photo-path/`).then(handleResponse),
+  setPhotoPath: (dirPath) => apiFetch(`${API_BASE_URL}/config/photo-path/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dir_path: dirPath }),
+  }).then(handleResponse),
+  uploadPhotoZip: (file) => {
+    const formData = new FormData();
+    formData.append('zip', file);
+    return apiFetch(`${API_BASE_URL}/config/photo-path/`, {
+      method: 'POST',
+      body: formData,
+    }).then(handleResponse);
+  },
 };
 
 export const authAPI = {
