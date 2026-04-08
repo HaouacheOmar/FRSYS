@@ -1,3 +1,5 @@
+import daphne
+
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import cv2
@@ -6,6 +8,8 @@ from services.face_recognition import FaceRecognitionService
 import io
 from PIL import Image
 import logging
+import os
+import requests
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -16,19 +20,46 @@ app = FastAPI(title="Face Recognition Model Server", version="1.0.0")
 # CORS configuration - Allow Django server to connect
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
+    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000",    "http://192.168.1.104:8000" , 'http://192.168.1.105:8000'
+],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize face recognition service
-# Update DB_PATH to your actual face database location
-DB_PATH = r"C:\Users\youne\OneDrive\Desktop\test_photos"
+DEFAULT_DB_PATH = os.environ.get("FACE_DB_PATH", r"C:\Users\youne\OneDrive\Desktop\test_photos")
 
+def resolve_db_path():
+<<<<<<< Updated upstream
+    # Explicit env path should win in containerized deployments.
+    if os.environ.get("FACE_DB_PATH"):
+        return os.environ.get("FACE_DB_PATH")
+
+=======
+>>>>>>> Stashed changes
+    django_url = os.environ.get("DJANGO_SERVER_URL", "http://192.168.1.105:8000").rstrip("/")
+    endpoint = f"{django_url}/api/config/photo-path/"
+    try:
+        resp = requests.get(endpoint, timeout=2.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, dict):
+                path = data.get("dir_path_photo")
+                if path:
+                    return path
+    except Exception as exc:
+        logger.debug(f"Could not fetch DB path from Django ({endpoint}): {exc}")
+    return DEFAULT_DB_PATH
+
+
+DB_PATH = resolve_db_path()
+
+logger.info(f"Resolved DB_PATH: {DB_PATH}")
+
+# Initialize face recognition service after resolving DB path
 face_service = FaceRecognitionService(
     db_path=DB_PATH,
-    model_name="Facenet512"
+    model_name="buffalo_l"
 )
 
 @app.get("/")
@@ -47,7 +78,7 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "Face Recognition Model Server",
-        "model": "Facenet512",
+        "model": "InsightFace (buffalo_l)", # Updated label
         "db_path": DB_PATH
     }
 
@@ -156,15 +187,15 @@ async def register_face(person_id: str, file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    import uvicorn
+    import daphne
     
     logger.info("Starting Face Recognition Model Server...")
     logger.info(f"Database path: {DB_PATH}")
     
     # Run on localhost only (not exposed to network)
-    uvicorn.run(
+    daphne.run(
         app,
-        host="127.0.0.1",  # localhost only for security
+        host="0.0.0.0",  # localhost only for security
         port=5000,
         log_level="info"
     )

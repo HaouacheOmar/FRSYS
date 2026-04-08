@@ -6,8 +6,11 @@ export function useAdminGuestPresenceWebSocket(onGuestsUpdate) {
   useEffect(() => {
     let ws;
     let reconnectTimeout;
+    
     function connect() {
-      ws = new window.WebSocket('ws://localhost:8000/ws/admin/notifications/');
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new window.WebSocket(`${protocol}//${window.location.host}/ws/admin/notifications/`);
+      
       wsRef.current = ws;
       ws.onopen = () => {
         // Optionally, send a ping or auth message
@@ -30,7 +33,9 @@ export function useAdminGuestPresenceWebSocket(onGuestsUpdate) {
         ws.close();
       };
     }
+    
     connect();
+    
     return () => {
       if (wsRef.current) wsRef.current.close();
       if (reconnectTimeout) clearTimeout(reconnectTimeout);

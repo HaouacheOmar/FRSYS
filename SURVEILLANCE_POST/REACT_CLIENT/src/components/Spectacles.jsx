@@ -1,11 +1,18 @@
+// spectacles component: list, import and manage issued spectacles/glasses
+// simple ui: upload excel, create/edit/delete, filter pending/completed
 import { useState, useEffect } from 'react';
-import { spectaclesAPI, personsAPI, API_BASE_URL } from '../services/api';
+import { spectaclesAPI, personsAPI, API_BASE_URL, compagniesAPI } from '../services/api';
 import { useLang } from '../context/LangContext';
 
 const Spectacles = () => {
+  // translations
   const { T } = useLang();
+
+  // main state: list of spectacles and persons
   const [spectacles, setSpectacles] = useState([]);
   const [persons, setPersons] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [companyFilter, setCompanyFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [uploadSummary, setUploadSummary] = useState(null);
@@ -19,27 +26,33 @@ const Spectacles = () => {
   });
   const [editingId, setEditingId] = useState(null);
 
+  // load persons and spectacles whenever filter changes
   useEffect(() => {
     loadPersons();
     loadSpectacles();
-  }, [filter]);
+    loadCompanies();
+  }, [filter, companyFilter]);
 
+  // helper: normalize api list responses (supports pagination)
   const normalizeListResponse = (data) => {
     if (Array.isArray(data)) return data;
     if (Array.isArray(data?.results)) return data.results;
     return [];
   };
 
+  // fetch spectacles using filter
   const loadSpectacles = async () => {
     try {
       setLoading(true);
+      const params = {};
+      if (companyFilter) params.compagnie = companyFilter;
       let data;
       if (filter === 'pending') {
-        data = await spectaclesAPI.pending();
+        data = await spectaclesAPI.pending(params);
       } else if (filter === 'completed') {
-        data = await spectaclesAPI.completed();
+        data = await spectaclesAPI.completed(params);
       } else {
-        data = await spectaclesAPI.list();
+        data = await spectaclesAPI.list(params);
       }
       setSpectacles(normalizeListResponse(data));
       setError('');
@@ -50,6 +63,16 @@ const Spectacles = () => {
     }
   };
 
+  const loadCompanies = async () => {
+    try {
+      const data = await compagniesAPI.list();
+      setCompanies(data.results || []);
+    } catch (err) {
+      console.error('Failed to load companies:', err);
+    }
+  };
+
+  // fetch persons for select lists
   const loadPersons = async () => {
     try {
       const data = await personsAPI.list();
@@ -59,6 +82,7 @@ const Spectacles = () => {
     }
   };
 
+  // handle excel file upload: validate extension and call backend import
   const handleExcelUpload = async (file) => {
     if (!file) return;
     const fileName = file.name || '';
@@ -88,12 +112,14 @@ const Spectacles = () => {
     }
   };
 
+  // file input change handler
   const onFileInputChange = async (e) => {
     const [file] = e.target.files || [];
     await handleExcelUpload(file);
     e.target.value = '';
   };
 
+  // drag/drop helpers for the excel zone
   const onDragOver = (e) => {
     e.preventDefault();
     setIsDragging(true);
@@ -111,6 +137,7 @@ const Spectacles = () => {
     await handleExcelUpload(file);
   };
 
+  // create or update spectacle
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -134,6 +161,7 @@ const Spectacles = () => {
     }
   };
 
+  // populate form for editing
   const handleEdit = (spectacle) => {
     setFormData({
       person: String(spectacle.person?.id ?? spectacle.person ?? ''),
@@ -145,6 +173,7 @@ const Spectacles = () => {
     setShowForm(true);
   };
 
+  // delete with confirmation
   const handleDelete = async (id) => {
     if (window.confirm(T.deleteConfirmSpectacle)) {
       try {
@@ -156,6 +185,7 @@ const Spectacles = () => {
     }
   };
 
+  // mark as returned
   const handleMarkReturn = async (id) => {
     try {
       await spectaclesAPI.markReturn(id);
@@ -171,6 +201,7 @@ const Spectacles = () => {
     setEditingId(null);
   };
 
+  // helpers to display person name/id and main photo url
   const getPersonName = (personField) => {
     if (personField && typeof personField === 'object') {
       return `${personField.prenom || ''} ${personField.nom || ''}`.trim() || T.na;
@@ -199,6 +230,7 @@ const Spectacles = () => {
 
   if (loading) return <div className="container"><p>{T.loading}</p></div>;
 
+  // ui: list, controls, dropzone and optional form
   return (
     <div className="container">
       <h1>{T.spectaclesTitle}</h1>
@@ -209,6 +241,12 @@ const Spectacles = () => {
         <button className="connect-btn" onClick={() => setShowForm(true)}>
           {T.addSpectacle}
         </button>
+        <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)} style={{ marginLeft: 10 }}>
+          <option value="">{T.selectCompany}</option>
+          {companies.map((c) => (
+            <option key={c.id} value={c.id}>{c.label}</option>
+          ))}
+        </select>
         <div className="filter-buttons">
           <button
             className={filter === 'all' ? 'filter-active' : 'filter-btn'}
@@ -310,7 +348,13 @@ const Spectacles = () => {
       )}
 
       <div className="persons-cards-grid">
-        {spectacles.map((spectacle) => {
+        {spectacles
+          .filter((spectacle) => {
+            if (!companyFilter) return true;
+            const cid = spectacle?.person?.compagnie?.id || spectacle?.person?.compagnie || null;
+            return Number(cid) === Number(companyFilter);
+          })
+          .map((spectacle) => {
           const isPending = !spectacle.date_rentree;
           return (
             <article key={spectacle.id} className="person-split-card spectacle-split-card">

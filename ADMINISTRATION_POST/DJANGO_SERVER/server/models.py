@@ -186,3 +186,20 @@ class GuestPresence(models.Model):
     def __str__(self):
         state = "online" if self.is_online else "offline"
         return f"{self.user.username}: {state} ({self.connection_count})"
+
+
+class Config(models.Model):
+    """Simple site configuration table.
+
+    We store the path to the face-photo directory here so the admin UI
+    (or an API) can update it at runtime without changing settings.py.
+    """
+    dir_path_photo = models.CharField(max_length=1024, blank=True, help_text="Absolute path to photos folder")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Config"
+        verbose_name_plural = "Config"
+
+    def __str__(self):
+        return self.dir_path_photo or "(unset)"

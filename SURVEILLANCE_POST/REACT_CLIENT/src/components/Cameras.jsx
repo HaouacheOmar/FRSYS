@@ -23,6 +23,23 @@ const Cameras = () => {
   const [streamStatus, setStreamStatus] = useState({});
   const probeIntervalRef = useRef(null);
 
+  // helper: build an rtsp url from camera data or form data
+  // supports optional username/password and normalizes the path
+  const buildRtspUrl = (cam) => {
+    if (!cam || !cam.ip_address) return '';
+    const host = cam.ip_address;
+    const port = cam.rtsp_port ?? 554;
+    const user = cam.username || '';
+    const pass = cam.password || '';
+    // ensure path starts with '/'
+    let path = cam.rtsp_path || '/stream';
+    if (!path.startsWith('/')) path = '/' + path;
+
+    // build auth segment only when username provided
+    const auth = user ? `${encodeURIComponent(user)}${pass ? `:${encodeURIComponent(pass)}` : ''}@` : '';
+    return `rtsp://${auth}${host}:${port}${path}`;
+  };
+
   useEffect(() => {
     loadCameras();
     return () => {
@@ -241,7 +258,7 @@ const Cameras = () => {
               <h3>{camera.model_name}</h3>
               <p><strong>{T.ipLabel}:</strong> {camera.ip_address}</p>
               {camera.username && <p><strong>{T.userLabel}:</strong> {camera.username}</p>}
-              <p className="rtsp-url-display"><strong>{T.rtspLabel}:</strong> <code>{buildRtspUrl(camera)}</code></p>
+              <p className="rtsp-url-display"><strong>{T.rtspLabel}:</strong> <code>{camera.rtsp_url || buildRtspUrl(camera)}</code></p>
               <p>
                 <strong>{T.streamLabel}:</strong>{' '}
                 {(() => {

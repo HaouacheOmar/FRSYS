@@ -8,13 +8,13 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 class ModelServerClient:
-    """Client for communicating with the Model Server"""
+    """comm client -> model"""
     
     def __init__(self, model_server_url: str = None):
         """
-        Initialize Model Server client
+        init Model Server client
         
-        Args:
+        params:
             model_server_url: URL of the model server (default from settings)
         """
         self.base_url = (model_server_url or 
@@ -44,7 +44,7 @@ class ModelServerClient:
         """
         Send image to model server for recognition
         
-        Args:
+        params:
             image: numpy array (BGR format from OpenCV)
             
         Returns:
@@ -90,7 +90,7 @@ class ModelServerClient:
         """
         Register a new face in the model database
         
-        Args:
+        params:
             person_id: Unique identifier for the person
             image: numpy array (BGR format from OpenCV)
             
@@ -138,7 +138,7 @@ class ModelServerClient:
         """
         Recognize multiple faces in batch
         
-        Args:
+        params:
             images: List of numpy arrays (BGR format)
             
         Returns:

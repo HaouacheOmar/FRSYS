@@ -1,9 +1,15 @@
+import logging
+
 from channels.db import database_sync_to_async
 from channels.middleware import BaseMiddleware
+from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from rest_framework_simplejwt.tokens import AccessToken, TokenError
 
 from .auth_utils import get_user_by_id
+
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_cookie_header(headers):
@@ -29,6 +35,16 @@ class JWTAuthMiddleware(BaseMiddleware):
 
         cookie_header = _parse_cookie_header(scope.get("headers", []))
         token = _extract_cookie_value(cookie_header, "access_token")
+        debug_ws_auth = bool(getattr(settings, "DEBUG", False))
+
+        if debug_ws_auth:
+            path = scope.get("path", "")
+            logger.info(
+                "WS auth handshake path=%s has_cookie=%s has_access_token=%s",
+                path,
+                bool(cookie_header),
+                bool(token),
+            )
 
         if token:
             try:
@@ -38,7 +54,21 @@ class JWTAuthMiddleware(BaseMiddleware):
                     user = await database_sync_to_async(get_user_by_id)(user_id)
                     if user:
                         scope["user"] = user
+                        if debug_ws_auth:
+                            logger.info(
+                                "WS auth success path=%s user_id=%s username=%s",
+                                scope.get("path", ""),
+                                getattr(user, "id", None),
+                                getattr(user, "username", ""),
+                            )
             except TokenError:
-                pass
+                if debug_ws_auth:
+                    logger.warning(
+                        "WS auth token invalid path=%s",
+                        scope.get("path", ""),
+                    )
+
+        if debug_ws_auth and isinstance(scope.get("user"), AnonymousUser):
+            logger.warning("WS auth unresolved anonymous path=%s", scope.get("path", ""))
 
         return await super().__call__(scope, receive, send)
