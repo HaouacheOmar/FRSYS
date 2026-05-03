@@ -9,6 +9,7 @@ const Persons = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [companyFilter, setCompanyFilter] = useState('');
   const [formData, setFormData] = useState({
     mat: '',
     nom: '',
@@ -116,6 +117,13 @@ const Persons = () => {
     e.currentTarget.setAttribute('src', '/main.svg');
   };
 
+  const filteredPersons = companyFilter
+    ? persons.filter((person) => {
+        const companyId = person.compagnie?.id ?? person.compagnie;
+        return String(companyId) === String(companyFilter);
+      })
+    : persons;
+
   if (loading) return <div className="container"><p>{T.loading}</p></div>;
 
   return (
@@ -125,6 +133,18 @@ const Persons = () => {
       {error && <div className="error">{T.errorPrefix}: {error}</div>}
 
       <div className="controls">
+        <select
+          className="control-select"
+          value={companyFilter}
+          onChange={(e) => setCompanyFilter(e.target.value)}
+        >
+          <option value="">{T.filterAll}</option>
+          {companies.map((company) => (
+            <option key={company.id} value={company.id}>
+              {company.label}
+            </option>
+          ))}
+        </select>
         <button className="connect-btn" onClick={() => setShowForm(true)}>
           {T.addPerson}
         </button>
@@ -189,7 +209,7 @@ const Persons = () => {
       )}
 
       <div className="persons-cards-grid">
-        {persons.map((person) => (
+        {filteredPersons.map((person) => (
           <article key={person.id} className="person-split-card">
             <div className="person-split-photo">
               <img

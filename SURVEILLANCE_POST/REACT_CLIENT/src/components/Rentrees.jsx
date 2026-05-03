@@ -4,6 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import { rentreesAPI, API_BASE_URL, compagniesAPI } from '../services/api';
 import { useLang } from '../context/LangContext';
 import { useAuth } from '../context/AuthContext';
+import playIcon from '../assets/play-svgrepo-com.svg';
+import stopIcon from '../assets/stop-svgrepo-com.svg';
+import cameraIcon from '../assets/surveillance_cam.svg';
 
 const Rentrees = () => {
   const { T } = useLang();
@@ -14,7 +17,7 @@ const Rentrees = () => {
   const [error, setError] = useState('');
   const [companies, setCompanies] = useState([]);
   const [companyFilter, setCompanyFilter] = useState('');
-  const [showLateOnly, setShowLateOnly] = useState(false);
+  const [returnsFilter, setReturnsFilter] = useState('all');
   const [wsState, setWsState] = useState('disconnected');
   const [cameraEvents, setCameraEvents] = useState([]);
   const wsRef = useRef(null);
@@ -27,9 +30,15 @@ const Rentrees = () => {
     return state;
   };
 
+  const getSocketChipClass = (state) => {
+    if (state === 'connected') return 'camera-status-running';
+    if (state === 'connecting') return 'camera-status-checking';
+    return 'camera-status-stopped';
+  };
+
   useEffect(() => {
     loadRentrees();
-  }, [showLateOnly, companyFilter]);
+  }, [returnsFilter, companyFilter]);
 
   useEffect(() => {
     if (!isGuest) {
@@ -54,7 +63,9 @@ const Rentrees = () => {
       setLoading(true);
       const params = {};
       if (companyFilter) params.compagnie = companyFilter;
-      const data = showLateOnly ? await rentreesAPI.lateReturns(params) : await rentreesAPI.list(params);
+      const data = returnsFilter === 'late'
+        ? await rentreesAPI.lateReturns(params)
+        : await rentreesAPI.list(params);
       setRentrees(data.results || []);
       setError('');
     } catch (err) {
@@ -147,6 +158,16 @@ const Rentrees = () => {
     setWsState('disconnected');
   };
 
+  const toggleCamera = () => {
+    if (wsState === 'connected') {
+      disconnectCamera();
+      return;
+    }
+    if (wsState !== 'connecting') {
+      connectCamera();
+    }
+  };
+
   // small helpers to display person and photo
   const getPersonInfo = (rentree) => {
     const person = rentree?.spectacle?.person;
@@ -186,39 +207,38 @@ const Rentrees = () => {
 
       {error && <div className="error">{T.errorPrefix}: {error}</div>}
 
-      <div className={`status ${wsState}`}>
-        {T.cameraStatus}: {getSocketLabel(wsState)}
+      <div className="camera-status-row">
+        <span className={`camera-status-chip ${getSocketChipClass(wsState)}`}>
+          <img src={cameraIcon} alt="" className="camera-status-icon" aria-hidden="true" />
+          <span>{T.cameraStatus}: {getSocketLabel(wsState)}</span>
+        </span>
       </div>
 
       <div className="controls">
-        <button className="connect-btn" onClick={connectCamera}>
-          {T.startCameraRecognition}
-        </button>
-        <button className="disconnect-btn" onClick={disconnectCamera}>
-          {T.stopCameraRecognition}
+        <button
+          className={`camera-toggle-btn ${wsState === 'connected' ? 'is-on' : ''} ${wsState === 'connecting' ? 'is-busy' : ''}`}
+          onClick={toggleCamera}
+          disabled={wsState === 'connecting'}
+          title={wsState === 'connected' ? T.stopCameraRecognition : T.startCameraRecognition}
+          aria-label={wsState === 'connected' ? T.stopCameraRecognition : T.startCameraRecognition}
+        >
+          <span className="camera-toggle-icons" aria-hidden="true">
+            <img src={playIcon} alt="" className="camera-toggle-icon play-icon" />
+            <img src={stopIcon} alt="" className="camera-toggle-icon stop-icon" />
+          </span>
         </button>
         {!isGuest && (
-          <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)} style={{ marginLeft: 10 }}>
+          <select className="control-select" value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)}>
             <option value="">{T.selectCompany}</option>
             {companies.map((c) => (
               <option key={c.id} value={c.id}>{c.label}</option>
             ))}
           </select>
         )}
-        <div className="filter-buttons">
-          <button
-            className={!showLateOnly ? 'filter-active' : 'filter-btn'}
-            onClick={() => setShowLateOnly(false)}
-          >
-            {T.allReturns}
-          </button>
-          <button
-            className={showLateOnly ? 'filter-active' : 'filter-btn'}
-            onClick={() => setShowLateOnly(true)}
-          >
-            {T.lateReturnsOnly}
-          </button>
-        </div>
+        <select className="control-select" value={returnsFilter} onChange={(e) => setReturnsFilter(e.target.value)}>
+          <option value="all">{T.allReturns}</option>
+          <option value="late">{T.lateReturnsOnly}</option>
+        </select>
       </div>
 
       {cameraEvents.length > 0 && (

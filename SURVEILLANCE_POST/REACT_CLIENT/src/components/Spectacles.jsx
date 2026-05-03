@@ -13,6 +13,7 @@ const Spectacles = () => {
   const [persons, setPersons] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [companyFilter, setCompanyFilter] = useState('');
+  const [titleFilter, setTitleFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [uploadSummary, setUploadSummary] = useState(null);
@@ -228,6 +229,14 @@ const Spectacles = () => {
     e.currentTarget.setAttribute('src', '/main.svg');
   };
 
+  const outingTitles = Array.from(
+    new Set(
+      spectacles
+        .map((spectacle) => (spectacle?.title || '').trim())
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b));
+
   if (loading) return <div className="container"><p>{T.loading}</p></div>;
 
   // ui: list, controls, dropzone and optional form
@@ -241,32 +250,23 @@ const Spectacles = () => {
         <button className="connect-btn" onClick={() => setShowForm(true)}>
           {T.addSpectacle}
         </button>
-        <select value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)} style={{ marginLeft: 10 }}>
+        <select className="control-select" value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)}>
           <option value="">{T.selectCompany}</option>
           {companies.map((c) => (
             <option key={c.id} value={c.id}>{c.label}</option>
           ))}
         </select>
-        <div className="filter-buttons">
-          <button
-            className={filter === 'all' ? 'filter-active' : 'filter-btn'}
-            onClick={() => setFilter('all')}
-          >
-            {T.filterAll}
-          </button>
-          <button
-            className={filter === 'pending' ? 'filter-active' : 'filter-btn'}
-            onClick={() => setFilter('pending')}
-          >
-            {T.filterPending}
-          </button>
-          <button
-            className={filter === 'completed' ? 'filter-active' : 'filter-btn'}
-            onClick={() => setFilter('completed')}
-          >
-            {T.filterCompleted}
-          </button>
-        </div>
+        <select className="control-select" value={titleFilter} onChange={(e) => setTitleFilter(e.target.value)}>
+          <option value="">{T.selectOutingTitle || 'All outing titles'}</option>
+          {outingTitles.map((title) => (
+            <option key={title} value={title}>{title}</option>
+          ))}
+        </select>
+        <select className="control-select" value={filter} onChange={(e) => setFilter(e.target.value)}>
+          <option value="all">{T.filterAll}</option>
+          <option value="pending">{T.filterPending}</option>
+          <option value="completed">{T.filterCompleted}</option>
+        </select>
       </div>
 
       <div
@@ -281,6 +281,19 @@ const Spectacles = () => {
           <input type="file" accept=".xlsx,.xls" onChange={onFileInputChange} />
         </label>
         <small>{T.excelHint}</small>
+
+        <div className="excel-format-preview">
+          <div className="excel-format-header">{T.excelFormatPreviewTitle || 'Expected Excel Shape'}</div>
+          <div className="excel-format-rule">{T.excelTitleFromFileRule || 'Outing title is taken from the Excel file name (without extension).'}</div>
+          <div className="excel-format-columns">
+            <span>{T.excelColumnMat || 'matricule (or mat)'}</span>
+            <span>{T.excelColumnSortie || 'date_sortie'}</span>
+            <span>{T.excelColumnLimite || 'date_limite_retour'}</span>
+          </div>
+          <div className="excel-format-example">
+            <strong>{T.excelExampleRow || 'Example row'}:</strong> MAT-001 | 2026-04-13 | 2026-04-20
+          </div>
+        </div>
       </div>
 
       {uploadSummary && (
@@ -353,6 +366,10 @@ const Spectacles = () => {
             if (!companyFilter) return true;
             const cid = spectacle?.person?.compagnie?.id || spectacle?.person?.compagnie || null;
             return Number(cid) === Number(companyFilter);
+          })
+          .filter((spectacle) => {
+            if (!titleFilter) return true;
+            return (spectacle?.title || '').trim() === titleFilter;
           })
           .map((spectacle) => {
           const isPending = !spectacle.date_rentree;

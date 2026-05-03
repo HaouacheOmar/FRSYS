@@ -1,6 +1,9 @@
 // imports: react hooks, language translations, and styles
 import { useState, useEffect, useRef } from 'react';
 import { useLang } from '../context/LangContext';
+import playIcon from '../assets/play-svgrepo-com.svg';
+import stopIcon from '../assets/stop-svgrepo-com.svg';
+import cameraIcon from '../assets/surveillance_cam.svg';
 import '../styles/VideoStream.css';
 
 // video stream component: connects to a websocket, shows frames,
@@ -35,6 +38,12 @@ const VideoStream = () => {
   // update connection status text shown in the ui
   const updateStatus = (state, message) => {
     setStatus({ state, message });
+  };
+
+  const getSocketChipClass = (state) => {
+    if (state === 'connected') return 'camera-status-running';
+    if (state === 'connecting') return 'camera-status-checking';
+    return 'camera-status-stopped';
   };
 
   // show a transient error message for 5s
@@ -171,6 +180,16 @@ const VideoStream = () => {
     updateStatus('disconnected', T.disconnected);
   };
 
+  const toggleWebSocket = () => {
+    if (status.state === 'connected') {
+      disconnectWebSocket();
+      return;
+    }
+    if (status.state !== 'connecting') {
+      connectWebSocket();
+    }
+  };
+
   // keepalive ping every 30s and cleanup on unmount
   useEffect(() => {
     const pingInterval = setInterval(() => {
@@ -247,8 +266,11 @@ const VideoStream = () => {
     <div className="container">
       <h1>{T.videoStreamTitle}</h1>
 
-      <div className={`status ${status.state}`}>
-        {status.message}
+      <div className="camera-status-row">
+        <span className={`camera-status-chip ${getSocketChipClass(status.state)}`}>
+          <img src={cameraIcon} alt="" className="camera-status-icon" aria-hidden="true" />
+          <span>{T.cameraStatus}: {status.message}</span>
+        </span>
       </div>
 
       {error && (
@@ -258,11 +280,17 @@ const VideoStream = () => {
       )}
 
       <div className="controls">
-        <button className="connect-btn" onClick={connectWebSocket}>
-          {T.connect}
-        </button>
-        <button className="disconnect-btn" onClick={disconnectWebSocket}>
-          {T.disconnect}
+        <button
+          className={`camera-toggle-btn ${status.state === 'connected' ? 'is-on' : ''} ${status.state === 'connecting' ? 'is-busy' : ''}`}
+          onClick={toggleWebSocket}
+          disabled={status.state === 'connecting'}
+          title={status.state === 'connected' ? T.disconnect : T.connect}
+          aria-label={status.state === 'connected' ? T.disconnect : T.connect}
+        >
+          <span className="camera-toggle-icons" aria-hidden="true">
+            <img src={playIcon} alt="" className="camera-toggle-icon play-icon" />
+            <img src={stopIcon} alt="" className="camera-toggle-icon stop-icon" />
+          </span>
         </button>
       </div>
 
