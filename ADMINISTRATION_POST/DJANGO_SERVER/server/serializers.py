@@ -75,7 +75,7 @@ class SpectacleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Spectacle
-        fields = ["id", "person", "person_id", "date_sortie", "date_rentree", "date_limite_retour"]
+        fields = ["id", "person", "person_id", "title", "date_sortie", "date_rentree", "date_limite_retour"]
 
 # serializer for return event records
 class RentreeSerializer(serializers.ModelSerializer):

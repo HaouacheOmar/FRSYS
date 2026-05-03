@@ -70,6 +70,8 @@ class Camera(models.Model):
 # outing record table
 class Spectacle(models.Model):
     person = models.ForeignKey(Person, on_delete=models.CASCADE, related_name="spectacles")
+    # optional human-readable title for the outing (e.g., 'Site Visit', 'Training')
+    title = models.CharField(max_length=255, null=True, blank=True, db_index=True)
     # time when person goes out
     date_sortie = models.DateTimeField()
     # time when person comes back
@@ -189,11 +191,7 @@ class GuestPresence(models.Model):
 
 
 class Config(models.Model):
-    """Simple site configuration table.
 
-    We store the path to the face-photo directory here so the admin UI
-    (or an API) can update it at runtime without changing settings.py.
-    """
     dir_path_photo = models.CharField(max_length=1024, blank=True, help_text="Absolute path to photos folder")
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -31,11 +31,20 @@ export const AuthProvider = ({ children }) => {
 
     console.log('Connecting to guest presence WebSocket at:', wsBase);
     const socket = new WebSocket(`${wsBase.replace(/\/$/, '')}/ws/presence/guest/`);
+    let pingInterval;
+
     socket.onopen = () => {
       socket.send(JSON.stringify({ type: 'ping' }));
+      // Keep the connection alive and verify presence
+      pingInterval = setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ type: 'ping' }));
+        }
+      }, 15000);
     };
     socket.onclose = () => {
       guestPresenceSocketRef.current = null;
+      if (pingInterval) clearInterval(pingInterval);
     };
 
     guestPresenceSocketRef.current = socket;

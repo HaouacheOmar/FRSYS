@@ -1,13 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
+import { useLang } from '../context/LangContext';
 import '../styles/CheckIns.css';
 import verifiedStateSvg from '../assets/verified_state.svg';
 import dontBelongStateSvg from '../assets/dont_belong_state.svg';
 import inverifiedStateSvg from '../assets/inverified_state.svg';
 import neutralStateSvg from '../assets/neutral_state.svg';
+import playIcon from '../assets/play-svgrepo-com.svg';
+import stopIcon from '../assets/stop-svgrepo-com.svg';
+import cameraIcon from '../assets/surveillance_cam.svg';
 
 const CheckIns = () => {
+  const { T } = useLang();
   const [ws, setWs] = useState(null);
-  const [status, setStatus] = useState({ state: 'disconnected', message: 'Disconnected' });
+  const [status, setStatus] = useState({ state: 'disconnected', message: T.disconnected });
   const [detections, setDetections] = useState([]);
   const [error, setError] = useState('');
   const wsRef = useRef(null);
@@ -25,6 +30,12 @@ const CheckIns = () => {
   const showError = (message) => {
     setError(message);
     setTimeout(() => setError(''), 5000);
+  };
+
+  const getSocketChipClass = (state) => {
+    if (state === 'connected') return 'camera-status-running';
+    if (state === 'connecting') return 'camera-status-checking';
+    return 'camera-status-stopped';
   };
 
 
@@ -127,18 +138,18 @@ const CheckIns = () => {
 
   const connectWebSocket = () => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      console.log('Already connected');
+      console.log(T.alreadyConnected);
       return;
     }
 
-    updateStatus('connecting', 'Connecting...');
+    updateStatus('connecting', T.connecting);
 
     try {
       const websocket = new WebSocket(WS_URL);
 
       websocket.onopen = () => {
         console.log('WebSocket connected');
-        updateStatus('connected', 'Connected');
+        updateStatus('connected', T.connected);
         websocket.send(JSON.stringify({ type: 'start', mode: 'checkin' }));
       };
 
@@ -153,12 +164,12 @@ const CheckIns = () => {
 
       websocket.onerror = (error) => {
         console.error('WebSocket error:', error);
-        showError('WebSocket error occurred');
+        showError(T.websocketErrorOccurred);
       };
 
       websocket.onclose = () => {
         console.log('WebSocket closed');
-        updateStatus('disconnected', 'Disconnected');
+        updateStatus('disconnected', T.disconnected);
         wsRef.current = null;
         setWs(null);
       };
@@ -167,8 +178,8 @@ const CheckIns = () => {
       setWs(websocket);
     } catch (e) {
       console.error('Error creating WebSocket:', e);
-      showError('Failed to create WebSocket connection');
-      updateStatus('disconnected', 'Disconnected');
+      showError(T.websocketConnectionFailed);
+      updateStatus('disconnected', T.disconnected);
     }
   };
 
@@ -179,8 +190,18 @@ const CheckIns = () => {
       wsRef.current = null;
       setWs(null);
     }
-    updateStatus('disconnected', 'Disconnected');
+    updateStatus('disconnected', T.disconnected);
     setDetections([]);
+  };
+
+  const toggleWebSocket = () => {
+    if (status.state === 'connected') {
+      disconnectWebSocket();
+      return;
+    }
+    if (status.state !== 'connecting') {
+      connectWebSocket();
+    }
   };
 
   useEffect(() => {
@@ -273,10 +294,13 @@ const CheckIns = () => {
 
   return (
     <div className="checkins-container">
-      <h1>Face Recognition Check-Ins</h1>
+      <h1>{T.checkInsTitle}</h1>
 
-      <div className={`status ${status.state}`}>
-        {status.message}
+      <div className="camera-status-row">
+        <span className={`camera-status-chip ${getSocketChipClass(status.state)}`}>
+          <img src={cameraIcon} alt="" className="camera-status-icon" aria-hidden="true" />
+          <span>{T.cameraStatus}: {status.message}</span>
+        </span>
       </div>
 
       {error && (
@@ -286,11 +310,17 @@ const CheckIns = () => {
       )}
 
       <div className="controls">
-        <button className="connect-btn" onClick={connectWebSocket}>
-          Start Recognition
-        </button>
-        <button className="disconnect-btn" onClick={disconnectWebSocket}>
-          Stop Recognition
+        <button
+          className={`camera-toggle-btn ${status.state === 'connected' ? 'is-on' : ''} ${status.state === 'connecting' ? 'is-busy' : ''}`}
+          onClick={toggleWebSocket}
+          disabled={status.state === 'connecting'}
+          title={status.state === 'connected' ? T.stopRecognition : T.startRecognition}
+          aria-label={status.state === 'connected' ? T.stopRecognition : T.startRecognition}
+        >
+          <span className="camera-toggle-icons" aria-hidden="true">
+            <img src={playIcon} alt="" className="camera-toggle-icon play-icon" />
+            <img src={stopIcon} alt="" className="camera-toggle-icon stop-icon" />
+          </span>
         </button>
       </div>
 

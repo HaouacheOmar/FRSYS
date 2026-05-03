@@ -487,6 +487,9 @@ class SpectacleViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Outing title is derived from the uploaded file name (without extension).
+        import_title = os.path.splitext(getattr(excel_file, 'name', '') or '')[0].strip() or 'Untitled'
+
         if df.empty:
             return Response(
                 {"detail": "Excel file is empty."},
@@ -547,6 +550,7 @@ class SpectacleViewSet(viewsets.ModelViewSet):
             to_create.append(
                 Spectacle(
                     person=person,
+                    title=import_title,
                     date_sortie=date_sortie,
                     date_rentree=date_rentree,
                     date_limite_retour=date_limite_retour,
@@ -571,6 +575,7 @@ class SpectacleViewSet(viewsets.ModelViewSet):
                 "message": "Spectacles imported successfully.",
                 "created_count": len(created_ids),
                 "error_count": len(errors),
+                "title": import_title,
                 "errors": errors,
                 "data": serializer.data,
             },
@@ -588,6 +593,48 @@ class SpectacleViewSet(viewsets.ModelViewSet):
         pending_spectacles = self.get_queryset().filter(date_rentree__isnull=True)
         serializer = self.get_serializer(pending_spectacles, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def by_title(self, request):
+        """Return persons grouped by `Spectacle.title`.
+
+        Optional query params:
+        - `pending=1` to include only outings without a return time.
+        """
+        pending = str(request.query_params.get('pending') or '').lower() in ('1', 'true', 'yes')
+
+        qs = self.get_queryset()
+        if pending:
+            qs = qs.filter(date_rentree__isnull=True)
+
+        # eager load person and compagnie to reduce DB queries
+        qs = qs.select_related('person__compagnie')
+
+        groups = {}
+        for spec in qs:
+            title = (spec.title or 'Untitled').strip()
+            groups.setdefault(title, []).append(spec)
+
+        from .serializers import PersonSerializer
+
+        result = []
+        for title, specs in groups.items():
+            persons = []
+            seen_ids = set()
+            for s in specs:
+                p = s.person
+                if not p or p.id in seen_ids:
+                    continue
+                seen_ids.add(p.id)
+                persons.append(PersonSerializer(p).data)
+
+            result.append({
+                'title': title,
+                'count': len(persons),
+                'persons': persons,
+            })
+
+        return Response(result)
 
     @action(detail=False, methods=['get'])
     def completed(self, request):

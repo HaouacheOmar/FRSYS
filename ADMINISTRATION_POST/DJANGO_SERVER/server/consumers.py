@@ -6,6 +6,7 @@ Uses VideoStreamProcessor from Stream.py for core video processing logic.
 import asyncio
 import json
 import base64
+import time
 
 import cv2
 import numpy as np
@@ -374,6 +375,10 @@ class VideoStreamConsumer(AsyncWebsocketConsumer):
         for client, result in zip(clients, results):
             if isinstance(result, Exception):
                 VideoStreamConsumer.connected_clients.discard(client)
+                try:
+                    await client.close(code=4000)
+                except Exception:
+                    pass
 
 
 class FaceRecognitionConsumer(AsyncWebsocketConsumer):
@@ -454,17 +459,38 @@ class GuestPresenceConsumer(AsyncWebsocketConsumer):
             await self.close(code=4403)
             return
 
+        self.last_ping_time = time.time()
+        
         await self.accept()
         await database_sync_to_async(mark_guest_connected)(self.scope['user'])
         await self.send(text_data=json.dumps({'type': 'presence', 'status': 'connected'}))
+        
+        self.watchdog_task = asyncio.create_task(self._watchdog())
+
+    async def _watchdog(self):
+        """Monitors client pings and force-closes connection if timed out."""
+        try:
+            while True:
+                await asyncio.sleep(15)
+                # Client sends ping every 15s. If > 40s passes, it's crashed.
+                if time.time() - getattr(self, 'last_ping_time', 0) > 40.0:
+                    print("Guest heartbeat timeout, closing websocket.")
+                    await self.close(code=4000)
+                    break
+        except asyncio.CancelledError:
+            pass
 
     async def disconnect(self, close_code):
+        if hasattr(self, 'watchdog_task'):
+            self.watchdog_task.cancel()
+            
         user = self.scope.get('user')
         role = await database_sync_to_async(get_user_role)(user)
         if role == UserRole.ROLE_GUEST:
             await database_sync_to_async(mark_guest_disconnected)(user)
 
     async def receive(self, text_data):
+        self.last_ping_time = time.time()
         try:
             payload = json.loads(text_data)
         except Exception:

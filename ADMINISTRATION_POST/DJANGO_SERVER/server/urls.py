@@ -60,6 +60,7 @@ urlpatterns = [
     path('api/spectacles/', views.SpectacleViewSet.as_view({'get': 'list', 'post': 'create'}), name='spectacle-list'),
     path('api/spectacles/pending/', views.SpectacleViewSet.as_view({'get': 'pending'}), name='spectacle-pending'),
     path('api/spectacles/completed/', views.SpectacleViewSet.as_view({'get': 'completed'}), name='spectacle-completed'),
+    path('api/spectacles/by_title/', views.SpectacleViewSet.as_view({'get': 'by_title'}), name='spectacle-by-title'),
     path('api/spectacles/<int:pk>/', views.SpectacleViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update', 'delete': 'destroy'}), name='spectacle-detail'),
     path('api/spectacles/<int:pk>/mark_return/', views.SpectacleViewSet.as_view({'post': 'mark_return'}), name='spectacle-mark-return'),
     

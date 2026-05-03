@@ -161,6 +161,10 @@ export const spectaclesAPI = {
   markReturn: (id) => apiFetch(`${API_BASE_URL}/spectacles/${id}/mark_return/`, {
     method: 'POST',
   }).then(handleResponse),
+  byTitle: (params = {}) => {
+    const qs = params && Object.keys(params).length ? `?${new URLSearchParams(params).toString()}` : '';
+    return apiFetch(`${API_BASE_URL}/spectacles/by_title/${qs}`).then(handleResponse);
+  },
 };
 
 // Rentrees API
