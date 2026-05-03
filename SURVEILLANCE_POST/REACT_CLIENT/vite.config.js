@@ -9,7 +9,7 @@ export default defineConfig(({ mode }) => {
   // const targetIP = env.VITE_BACKEND_IP || '192.168.1.105'
   // const targetIP = env.VITE_BACKEND_IP || '10.76.124.180'
   // const targetIP = env.VITE_BACKEND_IP || '192.214.54.88'
-  const targetIP = env.VITE_BACKEND_IP || '127.0.0.1'
+  const targetIP = env.VITE_BACKEND_IP || '192.214.54.72'
 
 
   return {
