@@ -3,7 +3,7 @@
 
 // Example login that accepts credentials and returns access token (if server returns JSON)
 export async function apiLogin({ username, password }) {
-  const res = await fetch('http://192.168.1.105:8000/api/auth/login/', {
+  const res = await fetch('/api/auth/login/', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include', // important if server sets HttpOnly cookie
@@ -21,11 +21,10 @@ export async function apiLogin({ username, password }) {
   }
 }
 
-// Open presence websocket. If cookies are used, set url without token and ensure cookies sent
-// If cross-site cookies are not available, pass `accessToken` to use query-param fallback.
-export function openPresenceSocket({ host = '192.168.1.105', port = 8000, accessToken = null, onMessage, onOpen, onClose, onError }) {
+// Open presence websocket.
+export function openPresenceSocket({ accessToken = null, onMessage, onOpen, onClose, onError }) {
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  const originHost = `${host}:${port}`;
+  const originHost = window.location.host;
   let url = `${protocol}://${originHost}/ws/presence/guest/`;
   if (accessToken) {
     const qs = new URLSearchParams({ token: accessToken });
@@ -36,7 +35,6 @@ export function openPresenceSocket({ host = '192.168.1.105', port = 8000, access
 
   ws.onopen = (e) => {
     if (onOpen) onOpen(e);
-    // optional: send hello or auth ping
   };
 
   ws.onmessage = (ev) => {
@@ -59,19 +57,19 @@ export function openPresenceSocket({ host = '192.168.1.105', port = 8000, access
   return ws;
 }
 
-// React hook example (very small)
+// React hook example
 import { useEffect, useRef } from 'react';
 
-export function usePresence({ accessToken = null, host = '192.168.1.105', port = 8000, handlers = {} }) {
+export function usePresence({ accessToken = null, handlers = {} }) {
   const wsRef = useRef(null);
 
   useEffect(() => {
-    wsRef.current = openPresenceSocket({ host, port, accessToken, ...handlers });
+    wsRef.current = openPresenceSocket({ accessToken, ...handlers });
     return () => {
       try { wsRef.current && wsRef.current.close(); } catch(e) {}
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken, host, port]);
+  }, [accessToken]);
 
   return wsRef;
 }

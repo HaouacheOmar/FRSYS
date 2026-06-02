@@ -1,0 +1,22 @@
+﻿version: "3.9"
+
+services:
+  react:
+    build:
+      context: ../../SURVEILLANCE_POST/REACT_CLIENT
+      dockerfile: ../../DOCKER/front/Dockerfile.react
+    container_name: fr_react
+    restart: unless-stopped
+    environment:
+      - VITE_BACKEND_IP=${BACKEND_IP:-192.214.54.72}
+      - VITE_BACKEND_PORT=8000
+      # Explicitly supply the exact base HTTP API hook location
+      - VITE_API_BASE_URL=http://${BACKEND_IP:-192.214.54.72}:8000/api
+      # Base WebSocket endpoint context
+      - VITE_WS_URL=ws://${BACKEND_IP:-192.214.54.72}:8000
+      - VITE_CAMERA_IP=${CAMERA_IP:-192.214.54.73}
+      - VITE_CAMERA_RTSP_PORT=554
+      - VITE_MODEL_PORT=5000
+      - VITE_APP_NAME="FR Surveillance Client"
+    ports:
+      - "3000:3000"

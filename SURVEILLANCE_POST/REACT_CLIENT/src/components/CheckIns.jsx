@@ -18,8 +18,14 @@ const CheckIns = () => {
   const wsRef = useRef(null);
 
   // Dynamic WebSocket URL via Vite env or backend fallback
+  // const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  // const defaultWsHost = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
+  // const WS_BASE = import.meta.env.VITE_WS_URL || defaultWsHost;
+  // const WS_URL = `${WS_BASE.replace(/\/$/, '')}/ws/video/stream/`;
+
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const defaultWsHost = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
+  // Cleanly handle whether VITE_WS_URL has trailing slashes or not
   const WS_BASE = import.meta.env.VITE_WS_URL || defaultWsHost;
   const WS_URL = `${WS_BASE.replace(/\/$/, '')}/ws/video/stream/`;
 

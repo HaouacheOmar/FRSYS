@@ -29,10 +29,16 @@ const VideoStream = () => {
   const wsRef = useRef(null);
 
   // build ws url: in dev use same-origin (Vite proxy), in production use configured backend
+  // const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  // const sameOriginWsBase = `${protocol}//${window.location.host}`;
+  // const configuredWsBase = import.meta.env.VITE_WS_URL || '';
+  // const WS_BASE = import.meta.env.DEV ? sameOriginWsBase : configuredWsBase || sameOriginWsBase;
+  // const WS_URL = `${WS_BASE.replace(/\/$/, '')}/ws/video/stream/`;
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const sameOriginWsBase = `${protocol}//${window.location.host}`;
-  const configuredWsBase = import.meta.env.VITE_WS_URL || '';
-  const WS_BASE = import.meta.env.DEV ? sameOriginWsBase : configuredWsBase || sameOriginWsBase;
+  const sameOriginWsBase = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
+
+  // 🚀 FIXED: Always prioritize the configured environment variable first
+  const WS_BASE = import.meta.env.VITE_WS_URL || sameOriginWsBase;
   const WS_URL = `${WS_BASE.replace(/\/$/, '')}/ws/video/stream/`;
 
   // update connection status text shown in the ui
