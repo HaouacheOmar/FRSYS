@@ -22,21 +22,15 @@ if not SECRET_KEY:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env_bool('DEBUG', False)
 
-ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', '').split(',') if host.strip()]
-if not ALLOWED_HOSTS and DEBUG:
-    ALLOWED_HOSTS = ['localhost', '127.0.0.1', '192.214.54.72', '192.214.54.74','192.214.54.73']
+ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', '*').split(',') if host.strip()]
 
 
 # CORS settings for React frontend and WebSocket
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if origin.strip()]
-if not CORS_ALLOWED_ORIGINS and DEBUG:
-    CORS_ALLOWED_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000','http://192.214.54.74:3000']
 CORS_ALLOW_CREDENTIALS = True
 
 # CSRF settings
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if origin.strip()]
-if not CSRF_TRUSTED_ORIGINS and DEBUG:
-    CSRF_TRUSTED_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000','http://192.214.54.74:3000']
 CSRF_COOKIE_SECURE = env_bool('CSRF_COOKIE_SECURE', False)
 
 
@@ -119,7 +113,7 @@ DATABASES = {
         'NAME':os.getenv('DB_NAME', '').strip(),
         'USER':os.getenv('DB_USER', '').strip(),
         'PASSWORD':os.getenv('DB_PASSWORD', '').strip(),
-        'HOST':os.getenv('DB_HOST', '').strip(),
+        'HOST':os.getenv('DB_HOST', 'db').strip(),
         'PORT':os.getenv('DB_PORT', '').strip(),
     }
 }
@@ -241,3 +235,4 @@ REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {
     'auth_role_grant': os.getenv('THROTTLE_AUTH_ROLE_GRANT', '80/hour').strip(),
     'auth_guest_manage': os.getenv('THROTTLE_AUTH_GUEST_MANAGE', '200/hour').strip(),
 }
+PHOTOS_BASE_DIR='/data/faces'

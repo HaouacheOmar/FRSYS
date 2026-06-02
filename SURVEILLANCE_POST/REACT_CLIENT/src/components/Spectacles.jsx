@@ -218,7 +218,13 @@ const Spectacles = () => {
     return Number(personField) || null;
   };
 
-  const getMainPhoto = (personField) => {
+  // const getMainPhoto = (personField) => {
+  //   const pid = getPersonId(personField);
+  //   if (!pid) return '/main.svg';
+  //   return `${API_BASE_URL}/persons/${pid}/main-photo/`;
+  // };
+
+    const getMainPhoto = (personField) => {
     const pid = getPersonId(personField);
     if (!pid) return '/main.svg';
     return `${API_BASE_URL}/persons/${pid}/main-photo/`;

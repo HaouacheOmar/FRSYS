@@ -1,0 +1,66 @@
+﻿version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    container_name: fr_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-FRSYS_DB}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-root}
+    ports:
+      - "5432:5432"
+    volumes:
+      - fr_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s     
+      timeout: 5s
+      retries: 5
+
+  model:
+    build:
+      context: ../../ADMINISTRATION_POST/MODEL_SERVER
+      dockerfile: ../../DOCKER/back/Dockerfile.model
+    container_name: fr_model
+    restart: unless-stopped
+    environment:
+      DJANGO_SERVER_URL: http://django:8000
+      FACE_DB_PATH: /data/faces
+      CORS_ALLOWED_ORIGINS: http://${FRONTEND_IP:-192.214.54.74}:3000
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./face_photos:/data/faces
+
+  django:
+    build:
+      context: ../../ADMINISTRATION_POST/DJANGO_SERVER
+      dockerfile: ../../DOCKER/back/Dockerfile.django
+    container_name: fr_django
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      model:
+        condition: service_started
+    environment:
+      DEBUG: 1
+      SECRET_KEY: change-me-in-backend-env
+      ALLOWED_HOSTS: ${BACKEND_IP:-192.214.54.72},${FRONTEND_IP:-192.214.54.74},localhost,127.0.0.1,*
+      CORS_ALLOWED_ORIGINS: http://${FRONTEND_IP:-192.214.54.74}:3000,http://localhost:3000,http://127.0.0.1:3000
+      CSRF_TRUSTED_ORIGINS: http://${FRONTEND_IP:-192.214.54.74}:3000,http://localhost:3000,http://127.0.0.1:3000
+      DB_NAME: ${DB_NAME:-FRSYS_DB}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-root}
+      DB_HOST: db
+      DB_PORT: 5432
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./face_photos:/data/faces # Correct placement of the shared folder for Django
+
+# This section now correctly maps only named Docker volumes
+volumes:
+  fr_pg_data:

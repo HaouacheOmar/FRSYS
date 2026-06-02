@@ -96,12 +96,20 @@ const Rentrees = () => {
 
   // connect to camera websocket and listen for return events
   const connectCamera = () => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
+    // if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
 
+    // setWsState('connecting');
+    // const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    // const defaultWsHost = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
+    // const WS_BASE = import.meta.env.VITE_WS_URL || defaultWsHost;
+    // const ws = new WebSocket(`${WS_BASE.replace(/\/$/, '')}/ws/video/stream/`);
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
     setWsState('connecting');
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const defaultWsHost = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
+    
     const WS_BASE = import.meta.env.VITE_WS_URL || defaultWsHost;
+    // 🔗 Cleanly builds into: ws://192.214.54.72:8000/ws/video/stream/
     const ws = new WebSocket(`${WS_BASE.replace(/\/$/, '')}/ws/video/stream/`);
 
     ws.onopen = () => {

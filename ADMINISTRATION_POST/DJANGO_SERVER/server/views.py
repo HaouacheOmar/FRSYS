@@ -94,7 +94,6 @@ def config_photo_path_view(request):
             Config.objects.create(dir_path_photo=path)
         return Response({'dir_path_photo': path})
 
-    # Handle uploaded zip
     try:
         base = getattr(settings, 'PHOTOS_BASE_DIR', '') or getattr(settings, 'FACE_DB_PATH', '') or os.getcwd()
         target_root = os.path.abspath(base)
@@ -150,9 +149,7 @@ class CompagnieViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def persons(self, request, pk=None):
-        """Get all persons belonging to this company."""
         compagnie = self.get_object()
-        # Optimize: eager load compagnie relation to avoid duplicate queries
         persons = compagnie.persons.select_related('compagnie').all()
         serializer = PersonSerializer(persons, many=True)
         return Response(serializer.data)
@@ -315,7 +312,7 @@ class CameraViewSet(viewsets.ModelViewSet):
         Probe all cameras in parallel using a thread pool.
         Returns a dict keyed by camera id: {id: {online, rtsp_url}}.
         """
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import concurrent.futures
         cameras = Camera.objects.all()
         results = {}
 
@@ -323,15 +320,30 @@ class CameraViewSet(viewsets.ModelViewSet):
             online, rtsp_url = _probe_camera(cam)
             return cam.id, online, rtsp_url
 
-        with ThreadPoolExecutor(max_workers=min(len(cameras), 20) or 1) as pool:
+        # Use ThreadPoolExecutor but handle concurrent.futures.TimeoutError so
+        # a slow probe doesn't cause the entire request to fail. Mark unfinished
+        # probes as offline and return partial results.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(cameras), 20) or 1) as pool:
             futures = {pool.submit(_job, cam): cam.id for cam in cameras}
-            for future in as_completed(futures, timeout=10):
-                try:
-                    cam_id, online, rtsp_url = future.result()
-                    results[cam_id] = {'online': online, 'rtsp_url': rtsp_url}
-                except Exception:
-                    cam_id = futures[future]
-                    results[cam_id] = {'online': False, 'rtsp_url': ''}
+            try:
+                for future in concurrent.futures.as_completed(futures, timeout=10):
+                    try:
+                        cam_id, online, rtsp_url = future.result()
+                        results[cam_id] = {'online': online, 'rtsp_url': rtsp_url}
+                    except Exception:
+                        cam_id = futures.get(future)
+                        results[cam_id] = {'online': False, 'rtsp_url': ''}
+            except concurrent.futures.TimeoutError:
+                # Some futures didn't finish within timeout: gather finished ones
+                for future, cam_id in futures.items():
+                    if future.done():
+                        try:
+                            _, online, rtsp_url = future.result()
+                            results[cam_id] = {'online': online, 'rtsp_url': rtsp_url}
+                        except Exception:
+                            results[cam_id] = {'online': False, 'rtsp_url': ''}
+                    else:
+                        results[cam_id] = {'online': False, 'rtsp_url': ''}
 
         return Response(results)
 
@@ -356,29 +368,9 @@ def _build_rtsp_url(camera):
 
 def _probe_camera(camera):
     """
-    Try to open the camera's RTSP stream with OpenCV and read one frame.
-    Runs inside a daemon thread; the caller joins with a 5-second timeout.
-    Returns (online: bool, rtsp_url: str).
+    Try to open the camera's RTSP stream with OpenCV.
+    If it fails, fall back to ffmpeg.
     """
-    import threading
-    rtsp_url = _build_rtsp_url(camera)
-    result = {'online': False}
-
-    def _try():
-        try:
-            import cv2
-            cap = cv2.VideoCapture(rtsp_url)
-            if cap.isOpened():
-                ret, _ = cap.read()
-                result['online'] = bool(ret)
-            cap.release()
-        except Exception:
-            result['online'] = False
-
-    t = threading.Thread(target=_try, daemon=True)
-    t.start()
-    t.join(timeout=5)
-    return result['online'], rtsp_url
     import threading
     rtsp_url = _build_rtsp_url(camera)
     result = {'online': False}
@@ -386,7 +378,6 @@ def _probe_camera(camera):
     def _try_opencv():
         try:
             import cv2
-            # prefer FFMPEG backend when available
             try:
                 cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
             except Exception:
@@ -405,26 +396,18 @@ def _probe_camera(camera):
     if result['online']:
         return True, rtsp_url
 
-    # Fallback: try calling ffmpeg to grab one frame (uses TCP transport to avoid UDP blocking)
+    # Fallback: try calling ffmpeg to grab one frame
     try:
         tmpdir = tempfile.gettempdir()
         out_path = os.path.join(tmpdir, f"probe_{camera.id}_{int(os.getpid())}.jpg")
-        # Build ffmpeg command
         cmd = [
-            'ffmpeg',
-            '-rtsp_transport', 'tcp',
-            '-i', rtsp_url,
-            '-t', '2',
-            '-frames:v', '1',
-            '-y', out_path
+            'ffmpeg', '-rtsp_transport', 'tcp',
+            '-i', rtsp_url, '-t', '2', '-frames:v', '1', '-y', out_path
         ]
         proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
         ok = proc.returncode == 0 and os.path.exists(out_path) and os.path.getsize(out_path) > 0
-        try:
-            if os.path.exists(out_path):
-                os.remove(out_path)
-        except Exception:
-            pass
+        if os.path.exists(out_path):
+            os.remove(out_path)
         return bool(ok), rtsp_url
     except Exception:
         return False, rtsp_url
