@@ -19,41 +19,34 @@ SECRET_KEY = os.getenv('SECRET_KEY', '').strip()
 if not SECRET_KEY:
     raise ImproperlyConfigured('SECRET_KEY is not set. Add it to DJANGO_SERVER/.env')
 
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env_bool('DEBUG', False)
 
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', '*').split(',') if host.strip()]
 
-
-# CORS settings for React frontend and WebSocket
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if origin.strip()]
 CORS_ALLOW_CREDENTIALS = True
 
-# CSRF settings
 CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if origin.strip()]
 CSRF_COOKIE_SECURE = env_bool('CSRF_COOKIE_SECURE', False)
 
-
-# Application definition
-
 INSTALLED_APPS = [
-    'daphne',  
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'corsheaders',  
-    'channels', 
-    'server',   
-    'rest_framework',  
-    'django_filters',  
+    'corsheaders',
+    'channels',
+    'server',
+    'rest_framework',
+    'django_filters',
     'rest_framework_simplejwt.token_blacklist',
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware', 
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -68,7 +61,7 @@ ROOT_URLCONF = 'FRSYS.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'server' / 'templates'],  # Add server templates
+        'DIRS': [BASE_DIR / 'server' / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -82,7 +75,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'FRSYS.wsgi.application'
 
-# ASGI Application for WebSocket support
 ASGI_APPLICATION = 'FRSYS.routing.application'
 
 CHANNEL_LAYERS = {
@@ -91,7 +83,6 @@ CHANNEL_LAYERS = {
     }
 }
 
-# Enable Redis layer only when explicitly requested and package is available.
 if os.getenv('USE_REDIS_CHANNEL_LAYER', '0') == '1':
     if importlib.util.find_spec('channels_redis') is not None:
         CHANNEL_LAYERS = {
@@ -102,10 +93,6 @@ if os.getenv('USE_REDIS_CHANNEL_LAYER', '0') == '1':
                 },
             },
         }
-
-
-# Database
-# https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
 DATABASES = {
     'default': {
@@ -118,13 +105,7 @@ DATABASES = {
     }
 }
 
-
 USE_I18N = True
-
-
-
-# Password validation
-# https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -141,36 +122,18 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
-# Internationalization
-# https://docs.djangoproject.com/en/6.0/topics/i18n/
-
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'
 
-
 USE_TZ = True
-
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
 
-
-# Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-
-
-
-
-
-# Keep CORS narrow by default; allow all only when explicitly set.
 CORS_ALLOW_ALL_ORIGINS = env_bool('CORS_ALLOW_ALL_ORIGINS', False)
 
-# Django REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'server.authentication.CookieJWTAuthentication',
