@@ -1,8 +1,4 @@
-"""
-WebSocket consumers for streaming video frames with face recognition.
-This module handles real-time streaming of processed video frames to clients.
-Uses VideoStreamProcessor from Stream.py for core video processing logic.
-"""
+
 import asyncio
 import json
 import base64
@@ -38,7 +34,6 @@ class VideoStreamConsumer(AsyncWebsocketConsumer):
     JPEG_QUALITY = 70
     SEND_TIMEOUT_SEC = 0.2
     
-    # Class-level shared resources
     stream_processor = None
     streaming_task = None
     connected_clients = set()
@@ -46,15 +41,12 @@ class VideoStreamConsumer(AsyncWebsocketConsumer):
     
     @staticmethod
     def create_json_response(msg_type, **kwargs):
-        """Helper to create standardized JSON responses."""
         return json.dumps({'type': msg_type, **kwargs})
     
     async def send_json(self, msg_type, **kwargs):
-        """Helper to send JSON responses."""
         await self.send(text_data=self.create_json_response(msg_type, **kwargs))
     
     async def connect(self):
-        """Handle new WebSocket connection."""
         role = await database_sync_to_async(get_user_role)(self.scope.get('user'))
         if role not in {UserRole.ROLE_ADMIN, UserRole.ROLE_GUEST}:
             await self.close(code=4403)
@@ -63,12 +55,10 @@ class VideoStreamConsumer(AsyncWebsocketConsumer):
         await self.accept()
         VideoStreamConsumer.connected_clients.add(self)
         
-        # Initialize VideoStreamProcessor if needed
         if not VideoStreamConsumer.stream_processor:
             if not await self._initialize_stream_processor():
                 return
         
-        # Start streaming task if needed
         if not VideoStreamConsumer.streaming_task or VideoStreamConsumer.streaming_task.done():
             VideoStreamConsumer.streaming_task = asyncio.create_task(self.stream_video())
         
