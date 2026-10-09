@@ -1,7 +1,7 @@
 // rentrees component: shows recorded returns and listens to camera websocket
 // it can auto-detect returned items from websocket frames and refresh list
 import { useState, useEffect, useRef } from 'react';
-import { rentreesAPI, API_BASE_URL, compagniesAPI } from '../services/api';
+import { rentreesAPI, API_BASE_URL, compagniesAPI, wsUrl } from '../services/api';
 import { useLang } from '../context/LangContext';
 import { useAuth } from '../context/AuthContext';
 import playIcon from '../assets/play-svgrepo-com.svg';
@@ -63,9 +63,8 @@ const Rentrees = () => {
       setLoading(true);
       const params = {};
       if (companyFilter) params.compagnie = companyFilter;
-      const data = returnsFilter === 'late'
-        ? await rentreesAPI.lateReturns(params)
-        : await rentreesAPI.list(params);
+      if (returnsFilter === 'late') params.est_retard = 'true';
+      const data = await rentreesAPI.list(params);
       setRentrees(data.results || []);
       setError('');
     } catch (err) {
@@ -96,21 +95,9 @@ const Rentrees = () => {
 
   // connect to camera websocket and listen for return events
   const connectCamera = () => {
-    // if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
-
-    // setWsState('connecting');
-    // const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    // const defaultWsHost = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
-    // const WS_BASE = import.meta.env.VITE_WS_URL || defaultWsHost;
-    // const ws = new WebSocket(`${WS_BASE.replace(/\/$/, '')}/ws/video/stream/`);
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
     setWsState('connecting');
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const defaultWsHost = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
-    
-    const WS_BASE = import.meta.env.VITE_WS_URL || defaultWsHost;
-    // 🔗 Cleanly builds into: ws://192.214.54.72:8000/ws/video/stream/
-    const ws = new WebSocket(`${WS_BASE.replace(/\/$/, '')}/ws/video/stream/`);
+    const ws = new WebSocket(wsUrl('/ws/video/stream/'));
 
     ws.onopen = () => {
       setWsState('connected');
@@ -150,6 +137,8 @@ const Rentrees = () => {
     };
 
     ws.onclose = () => {
+      // A late close from a replaced socket must not tear down the new one.
+      if (wsRef.current !== ws) return;
       setWsState('disconnected');
       wsRef.current = null;
     };

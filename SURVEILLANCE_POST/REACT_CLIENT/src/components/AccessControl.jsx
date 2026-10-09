@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { authAPI, configAPI } from '../services/api';
+import { authAPI, configAPI, wsUrl } from '../services/api';
 import { useLang } from '../context/LangContext';
 import '../styles/GuestCards.css';
 import userSvg from '../assets/users-svgrepo-com.svg';
@@ -42,10 +42,7 @@ const AccessControl = () => {
     let ws;
     if (user && user.role === 'admin') {
       
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const defaultWsHost = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
-      const wsBase = import.meta.env.VITE_WS_URL || defaultWsHost;
-      ws = new WebSocket(`${wsBase.replace(/\/$/, '')}/ws/admin/notifications/`);
+      ws = new WebSocket(wsUrl('/ws/admin/notifications/'));
       
       wsRef.current = ws;
       ws.onopen = () => {

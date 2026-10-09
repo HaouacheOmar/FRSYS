@@ -1,18 +1,22 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { authAPI } from '../services/api';
+import { authAPI, refreshSession, setAuthLostHandler, wsUrl } from '../services/api';
 
 const AuthContext = createContext(null);
+const SESSION_REFRESH_MS = 10 * 60 * 1000; // below ACCESS_TOKEN_LIFETIME (15 min) in settings.py
+const PRESENCE_RETRY_MS = 5000;
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const guestPresenceSocketRef = useRef(null);
+  const presenceRetryRef = useRef(null);
 
   const closeGuestPresenceSocket = () => {
-    if (guestPresenceSocketRef.current) {
-      guestPresenceSocketRef.current.close();
-      guestPresenceSocketRef.current = null;
-    }
+    clearTimeout(presenceRetryRef.current);
+    const socket = guestPresenceSocketRef.current;
+    // Clear the ref first: onclose treats "still current" as an unexpected drop and reconnects.
+    guestPresenceSocketRef.current = null;
+    if (socket) socket.close();
   };
 
   const connectGuestPresenceSocket = () => {
@@ -24,13 +28,7 @@ export const AuthProvider = ({ children }) => {
       return;
     }
 
-    const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const sameOriginWsBase = typeof window !== 'undefined' ? `${protocol}//${window.location.host}` : '';
-    const configuredWsBase = import.meta.env.VITE_WS_URL || (typeof window !== 'undefined' && window.REACT_APP_WS_URL) || '';
-    const wsBase = import.meta.env.DEV ? sameOriginWsBase : configuredWsBase || sameOriginWsBase;
-
-    console.log('Connecting to guest presence WebSocket at:', wsBase);
-    const socket = new WebSocket(`${wsBase.replace(/\/$/, '')}/ws/presence/guest/`);
+    const socket = new WebSocket(wsUrl('/ws/presence/guest/'));
     let pingInterval;
 
     socket.onopen = () => {
@@ -43,8 +41,12 @@ export const AuthProvider = ({ children }) => {
       }, 15000);
     };
     socket.onclose = () => {
-      guestPresenceSocketRef.current = null;
       if (pingInterval) clearInterval(pingInterval);
+      if (guestPresenceSocketRef.current !== socket) return; // closed on purpose
+      // Server restart / network blip: without this the guest shows offline to admins
+      // until they reload the page.
+      guestPresenceSocketRef.current = null;
+      presenceRetryRef.current = setTimeout(connectGuestPresenceSocket, PRESENCE_RETRY_MS);
     };
 
     guestPresenceSocketRef.current = socket;
@@ -66,6 +68,29 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     loadCurrentUser();
   }, []);
+
+  // Any API call whose 401 can't be fixed by a refresh ends the session.
+  useEffect(() => {
+    setAuthLostHandler(() => {
+      closeGuestPresenceSocket();
+      setUser(null);
+    });
+    return () => setAuthLostHandler(() => {});
+  }, []);
+
+  // Access token lives 15 min. WebSockets only send the cookie on connect and never
+  // see a 401, so refresh proactively while logged in.
+  const userId = user?.id;
+  useEffect(() => {
+    if (!userId) return undefined;
+    const timer = setInterval(async () => {
+      if (!(await refreshSession())) {
+        closeGuestPresenceSocket();
+        setUser(null);
+      }
+    }, SESSION_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [userId]);
 
   useEffect(() => {
     connectGuestPresenceSocket();

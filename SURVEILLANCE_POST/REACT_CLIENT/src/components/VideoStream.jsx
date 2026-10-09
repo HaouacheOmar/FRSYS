@@ -1,6 +1,7 @@
 // imports: react hooks, language translations, and styles
 import { useState, useEffect, useRef } from 'react';
 import { useLang } from '../context/LangContext';
+import { wsUrl } from '../services/api';
 import playIcon from '../assets/play-svgrepo-com.svg';
 import stopIcon from '../assets/stop-svgrepo-com.svg';
 import cameraIcon from '../assets/surveillance_cam.svg';
@@ -28,18 +29,7 @@ const VideoStream = () => {
   // refs to keep websocket instance between renders
   const wsRef = useRef(null);
 
-  // build ws url: in dev use same-origin (Vite proxy), in production use configured backend
-  // const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  // const sameOriginWsBase = `${protocol}//${window.location.host}`;
-  // const configuredWsBase = import.meta.env.VITE_WS_URL || '';
-  // const WS_BASE = import.meta.env.DEV ? sameOriginWsBase : configuredWsBase || sameOriginWsBase;
-  // const WS_URL = `${WS_BASE.replace(/\/$/, '')}/ws/video/stream/`;
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const sameOriginWsBase = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
-
-  // 🚀 FIXED: Always prioritize the configured environment variable first
-  const WS_BASE = import.meta.env.VITE_WS_URL || sameOriginWsBase;
-  const WS_URL = `${WS_BASE.replace(/\/$/, '')}/ws/video/stream/`;
+  const WS_URL = wsUrl('/ws/video/stream/');
 
   // update connection status text shown in the ui
   const updateStatus = (state, message) => {
@@ -158,7 +148,8 @@ const VideoStream = () => {
       };
 
       websocket.onclose = () => {
-        // cleanup on close
+        // A late close from a replaced socket must not tear down the new one.
+        if (wsRef.current !== websocket) return;
         console.log('WebSocket closed');
         updateStatus('disconnected', T.disconnected);
         wsRef.current = null;
@@ -184,6 +175,7 @@ const VideoStream = () => {
       setWs(null);
     }
     updateStatus('disconnected', T.disconnected);
+    setFrameSrc(null);
   };
 
   const toggleWebSocket = () => {

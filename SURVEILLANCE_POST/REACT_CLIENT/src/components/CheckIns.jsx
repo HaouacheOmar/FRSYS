@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLang } from '../context/LangContext';
+import { wsUrl } from '../services/api';
 import '../styles/CheckIns.css';
 import verifiedStateSvg from '../assets/verified_state.svg';
 import dontBelongStateSvg from '../assets/dont_belong_state.svg';
@@ -17,17 +18,7 @@ const CheckIns = () => {
   const [error, setError] = useState('');
   const wsRef = useRef(null);
 
-  // Dynamic WebSocket URL via Vite env or backend fallback
-  // const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  // const defaultWsHost = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
-  // const WS_BASE = import.meta.env.VITE_WS_URL || defaultWsHost;
-  // const WS_URL = `${WS_BASE.replace(/\/$/, '')}/ws/video/stream/`;
-
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const defaultWsHost = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
-  // Cleanly handle whether VITE_WS_URL has trailing slashes or not
-  const WS_BASE = import.meta.env.VITE_WS_URL || defaultWsHost;
-  const WS_URL = `${WS_BASE.replace(/\/$/, '')}/ws/video/stream/`;
+  const WS_URL = wsUrl('/ws/video/stream/');
 
   const updateStatus = (state, message) => {
     setStatus({ state, message });
@@ -174,6 +165,8 @@ const CheckIns = () => {
       };
 
       websocket.onclose = () => {
+        // A late close from a replaced socket must not tear down the new one.
+        if (wsRef.current !== websocket) return;
         console.log('WebSocket closed');
         updateStatus('disconnected', T.disconnected);
         wsRef.current = null;

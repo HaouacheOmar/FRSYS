@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLang } from '../context/LangContext';
 import { useAuth } from '../context/AuthContext';
+import { wsUrl } from '../services/api';
 import '../styles/Common.css';
 import { GuestMiniCard } from './GuestMiniCard';
 
@@ -27,11 +28,7 @@ const Home = () => {
 
     setSocketState('connecting');
     
-    // Dynamic WebSocket URL via Vite env or default backend port
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const defaultWsHost = `${protocol}//${window.location.hostname}${window.location.port === '3000' ? ':8000' : (window.location.port ? ':' + window.location.port : '')}`;
-    const wsBase = import.meta.env.VITE_WS_URL || defaultWsHost;
-    const ws = new WebSocket(`${wsBase.replace(/\/$/, '')}/ws/admin/notifications/`);
+    const ws = new WebSocket(wsUrl('/ws/admin/notifications/'));
     wsRef.current = ws;
 
     ws.onopen = () => {
