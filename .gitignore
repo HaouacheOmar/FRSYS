@@ -32,8 +32,8 @@ share/python-wheels/
 MANIFEST
 
 # Django migrations (keep versioned but ignore local test migrations)
-ADMINISTRATION_POST/DJANGO_SERVER/server/migrations/0*.py
-!ADMINISTRATION_POST/DJANGO_SERVER/server/migrations/__init__.py
+servers/DJANGO_SERVER/server/migrations/0*.py
+!servers/DJANGO_SERVER/server/migrations/__init__.py
 
 # Django database
 db.sqlite3
@@ -44,8 +44,8 @@ db.sqlite3-journal
 .env
 .env.local
 .env.*.local
-ADMINISTRATION_POST/DJANGO_SERVER/.env
-ADMINISTRATION_POST/DJANGO_SERVER/.env.local
+servers/DJANGO_SERVER/.env
+servers/DJANGO_SERVER/.env.local
 
 # IDE & Editor
 .vscode/
@@ -62,8 +62,8 @@ Thumbs.db
 node_modules/
 npm-debug.log
 yarn-error.log
-SURVEILLANCE_POST/REACT_CLIENT/dist/
-SURVEILLANCE_POST/REACT_CLIENT/build/
+client/REACT_CLIENT/dist/
+client/REACT_CLIENT/build/
 
 # OS
 .DS_Store
@@ -104,3 +104,6 @@ htmlcov/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Local Claude Code notes (not part of the project)
+CLAUDE.md
