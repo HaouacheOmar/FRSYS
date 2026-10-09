@@ -1,12 +1,16 @@
 
 import cv2
 import os
+import re
 from pathlib import Path
 import logging
 import numpy as np
 from insightface.app import FaceAnalysis
 
 logger = logging.getLogger(__name__)
+
+# Folder Django creates for each photos zip uploaded from the admin page (views.config_photo_path_view).
+UPLOAD_FOLDER = re.compile(r'photos_\d{14}')
 
 class FaceRecognitionService:
     """Service for face recognition using InsightFace"""
@@ -36,6 +40,17 @@ class FaceRecognitionService:
         logger.info(f"Face Recognition Service initialized with model: {model_name}")
         logger.info(f"Database path: {db_path}")
 
+    def _identity(self, folder, filename):
+        """Identity (= matricule) of a photo: the folder that directly contains it, e.g.
+        <db>/<mat>/main.jpg, or <db>/photos_<timestamp>/<mat>/main.jpg for a zip uploaded from
+        the admin page. Photos lying loose in the root or in an upload folder are named by
+        file: <db>/<mat>.jpg.
+        """
+        parent = Path(folder)
+        if parent == Path(self.db_path) or UPLOAD_FOLDER.fullmatch(parent.name):
+            return Path(filename).stem
+        return parent.name
+
     def _load_database(self):
         """Extract and cache embeddings from the image directory 
 
@@ -57,13 +72,7 @@ class FaceRecognitionService:
 
                 embedding = faces[0].normed_embedding
 
-                rel = os.path.relpath(root, self.db_path)
-                if rel == '.' or rel == '':
-                    person_id = Path(filename).stem
-                else:
-                    person_id = Path(rel).parts[0]
-
-                self.known_faces.setdefault(person_id, []).append(embedding)
+                self.known_faces.setdefault(self._identity(root, filename), []).append(embedding)
 
         total_images = sum(len(v) for v in self.known_faces.values())
         logger.info(f"Loaded {len(self.known_faces)} identities and {total_images} images into memory.")

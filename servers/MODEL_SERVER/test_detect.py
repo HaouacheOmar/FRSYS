@@ -77,6 +77,26 @@ class DetectEndpointTests(unittest.TestCase):
             self.assertEqual(ctx.exception.status_code, 401)
         self.app.require_token("")  # no token configured: open (local dev)
 
+    def test_photo_identities_for_every_folder_layout(self):
+        import os
+
+        from services.face_recognition import FaceRecognitionService
+
+        layouts = {
+            "111/main.jpg": "111",                            # <db>/<mat>/main.jpg
+            "photos_20261009120000/222/main.jpg": "222",      # zip uploaded from the admin page
+            "photos_20261009120000/333.jpg": "333",           # loose photo inside an uploaded zip
+            "444.jpg": "444",                                 # loose photo in the root
+        }
+        with tempfile.TemporaryDirectory() as db:
+            for rel in layouts:
+                path = os.path.join(db, *rel.split("/"))
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                cv2.imwrite(path, np.zeros((8, 8, 3), np.uint8))
+            service = FaceRecognitionService(db_path=db)
+
+        self.assertEqual(sorted(service.known_faces), sorted(layouts.values()))
+
     def test_only_health_and_detect_are_exposed(self):
         paths = {route.path for route in self.app.app.routes if not route.path.startswith(("/docs", "/redoc", "/openapi"))}
         self.assertEqual(paths, {"/health", "/api/detect"})
