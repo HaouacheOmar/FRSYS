@@ -100,7 +100,6 @@ htmlcov/
 *.code-workspace
 
 # Development artifacts
-.env.example (if not needed)
 .cache/
 .mypy_cache/
 .dmypy.json

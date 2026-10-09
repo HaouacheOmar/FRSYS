@@ -15,13 +15,19 @@ def env_bool(name, default=False):
     return value.strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
-SECRET_KEY = os.getenv('SECRET_KEY', '').strip()
-if not SECRET_KEY:
-    raise ImproperlyConfigured('SECRET_KEY is not set. Add it to DJANGO_SERVER/.env')
-
 DEBUG = env_bool('DEBUG', False)
 
-ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', '*').split(',') if host.strip()]
+SECRET_KEY = os.getenv('SECRET_KEY', '').strip()
+if not SECRET_KEY:
+    raise ImproperlyConfigured('SECRET_KEY is not set. Add it to DJANGO_SERVER/.env (see .env.example)')
+# The key signs every login token: a guessable one lets anyone forge an admin session.
+if not DEBUG and (len(SECRET_KEY) < 32 or 'change-me' in SECRET_KEY or SECRET_KEY.startswith('django-insecure-')):
+    raise ImproperlyConfigured(
+        'SECRET_KEY looks like a placeholder. Generate one with: '
+        'python -c "import secrets; print(secrets.token_urlsafe(50))"'
+    )
+
+ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if host.strip()]
 
 # The frontend origin(s). Single source for CORS, CSRF_TRUSTED_ORIGINS and the WebSocket origin check.
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if origin.strip()]
@@ -136,7 +142,6 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-CORS_ALLOW_ALL_ORIGINS = env_bool('CORS_ALLOW_ALL_ORIGINS', False)
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -152,10 +157,9 @@ REST_FRAMEWORK = {
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ],
-    'DEFAULT_RENDERER_CLASSES': [
-        'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer',
-    ],
+    # The browsable HTML API is a debugging aid; production serves JSON only.
+    'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer']
+    + (['rest_framework.renderers.BrowsableAPIRenderer'] if DEBUG else []),
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
         'rest_framework.parsers.FormParser',
