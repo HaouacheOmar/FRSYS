@@ -6,7 +6,10 @@ export const wsUrl = (path) => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const { hostname, port } = window.location;
   const fallback = `${protocol}//${hostname}${port === '3000' ? ':8000' : (port ? `:${port}` : '')}`;
-  return `${(import.meta.env.VITE_WS_URL || fallback).replace(/\/$/, '')}${path}`;
+  const configured = import.meta.env.VITE_WS_URL || '';
+  // A path like '/' means "same origin as this page" (the Docker build, behind nginx).
+  const base = configured.startsWith('/') ? `${protocol}//${window.location.host}${configured}` : (configured || fallback);
+  return `${base.replace(/\/$/, '')}${path}`;
 };
 
 const CSRF_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);

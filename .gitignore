@@ -107,3 +107,7 @@ dmypy.json
 
 # Local Claude Code notes (not part of the project)
 CLAUDE.md
+
+# Face photos used by Docker (biometric data: never commit)
+docker/photos/*
+!docker/photos/.gitkeep

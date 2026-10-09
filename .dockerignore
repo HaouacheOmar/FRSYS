@@ -1,0 +1,12 @@
+# Build context is the repo root: send only source code to Docker.
+.git
+.venv
+**/node_modules
+**/dist
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.local
+docker/photos
+CLAUDE.md
+servers/DJANGO_SERVER/server/migrations/0*.py

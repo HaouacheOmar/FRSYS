@@ -47,10 +47,36 @@ servers/
   MODEL_SERVER/       FastAPI face-recognition service
 client/
   REACT_CLIENT/       React + Vite frontend
+docker/               Dockerfiles, docker-compose.yml, nginx config, photos/ folder
 requirements.txt      Python dependencies for both servers (one virtualenv)
 ```
 
-## Getting started
+## Run with Docker (recommended)
+
+Everything runs on the administration PC: PostgreSQL, the model server, Django, and the client served by nginx. Only one port is published. nginx forwards `/api`, `/ws` and `/admin` to Django, so the posts just open `http://<admin PC IP>` in a browser.
+
+```bash
+cd docker
+cp .env.example .env          # set SITE_ORIGINS, ALLOWED_HOSTS and generate the secrets (commands inside)
+docker compose up -d --build
+docker compose exec django python manage.py createsuperuser   # first admin account
+```
+
+- **Face photos:** put them in `docker/photos/<matricule>/main.jpg`, or upload a zip from the *Access control* page. Then restart the model server (`docker compose restart model`), which loads photos at startup. The folder's contents are git-ignored.
+- **First start:** the model server downloads the InsightFace model (~300 MB, internet needed). It is kept in a volume.
+- **Data:** the database, the model cache and the generated migrations live in Docker volumes (`db_data`, `model_cache`, `django_migrations`).
+- **Logs:** `docker compose logs -f django` (or `model`, `client`, `db`).
+
+| File | Purpose |
+|---|---|
+| `docker/docker-compose.yml` | The four services, volumes and the single published port |
+| `docker/django.Dockerfile` | Django API + WebSockets (Daphne) |
+| `docker/model.Dockerfile` | Face-recognition model server |
+| `docker/client.Dockerfile` | Builds the React app and serves it with nginx |
+| `docker/nginx.conf` | Static files + proxy to Django |
+| `docker/.env.example` | Settings and secrets for the stack |
+
+## Run without Docker
 
 ### Requirements
 
@@ -145,4 +171,4 @@ npm run build
 - Logins use HttpOnly JWT cookies. The access token lasts 15 minutes and is refreshed automatically. Writes require a CSRF token.
 - WebSockets only accept connections from the origins in `CORS_ALLOWED_ORIGINS`.
 - Camera passwords are encrypted in the database and never returned by the API.
-- Keep PostgreSQL and the model server off the network: only port 8000 (Django) needs to be reachable from the posts.
+- Keep PostgreSQL and the model server off the network. With Docker only the client port is published. Without Docker, only port 8000 (Django) needs to be reachable from the posts.
