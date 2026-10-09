@@ -140,17 +140,10 @@ const createCrudAPI = (baseSegment) => ({
 });
 
 // Compagnies API
-export const compagniesAPI = {
-  ...createCrudAPI('compagnies'),
-  getPersons: (id) => apiFetch(`${API_BASE_URL}/compagnies/${id}/persons/`).then(handleResponse),
-};
+export const compagniesAPI = createCrudAPI('compagnies');
 
 // Persons API
-export const personsAPI = {
-  ...createCrudAPI('persons'),
-  getSpectacles: (id) => apiFetch(`${API_BASE_URL}/persons/${id}/spectacles/`).then(handleResponse),
-  getRentrees: (id) => apiFetch(`${API_BASE_URL}/persons/${id}/rentrees/`).then(handleResponse),
-};
+export const personsAPI = createCrudAPI('persons');
 
 // Cameras API
 export const camerasAPI = {
@@ -161,22 +154,14 @@ export const camerasAPI = {
   deactivate: (id) => apiFetch(`${API_BASE_URL}/cameras/${id}/deactivate/`, {
     method: 'POST',
   }).then(handleResponse),
-  ping: (id) => apiFetch(`${API_BASE_URL}/cameras/${id}/ping/`).then(handleResponse),
   pingAll: () => apiFetch(`${API_BASE_URL}/cameras/ping_all/`).then(handleResponse),
 };
 
 // Spectacles API
 export const spectaclesAPI = {
   ...createCrudAPI('spectacles'),
-  // 🚀 FIXED: Added support for passing filtering params down to custom list sub-routes
-  pending: (params = {}) => {
-    const qs = params && Object.keys(params).length ? `?${new URLSearchParams(params).toString()}` : '';
-    return apiFetch(`${API_BASE_URL}/spectacles/pending/${qs}`).then(handleResponse);
-  },
-  completed: (params = {}) => {
-    const qs = params && Object.keys(params).length ? `?${new URLSearchParams(params).toString()}` : '';
-    return apiFetch(`${API_BASE_URL}/spectacles/completed/${qs}`).then(handleResponse);
-  },
+  pending: (params = {}) => fetchAllPages(`${API_BASE_URL}/spectacles/pending/`, params),
+  completed: (params = {}) => fetchAllPages(`${API_BASE_URL}/spectacles/completed/`, params),
   // Backend SpectacleViewSet.create switches to bulk import when a file is attached.
   importExcel: (file) => {
     const formData = new FormData();
@@ -189,21 +174,10 @@ export const spectaclesAPI = {
   markReturn: (id) => apiFetch(`${API_BASE_URL}/spectacles/${id}/mark_return/`, {
     method: 'POST',
   }).then(handleResponse),
-  byTitle: (params = {}) => {
-    const qs = params && Object.keys(params).length ? `?${new URLSearchParams(params).toString()}` : '';
-    return apiFetch(`${API_BASE_URL}/spectacles/by_title/${qs}`).then(handleResponse);
-  },
 };
 
 // Rentrees API
-export const rentreesAPI = {
-  ...createCrudAPI('rentrees'),
-};
-
-// Status API
-export const statusAPI = {
-  check: () => apiFetch(`${API_BASE_URL}/status/`).then(handleResponse),
-};
+export const rentreesAPI = createCrudAPI('rentrees');
 
 // Config API for face-photo directory
 export const configAPI = {
@@ -252,7 +226,6 @@ export const authAPI = {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   }).then(handleResponse),
-  getCsrf: () => apiFetch(`${API_BASE_URL}/auth/csrf/`).then(handleResponse),
   listGuests: () => apiFetch(`${API_BASE_URL}/auth/guests/`).then(handleResponse),
   createGuest: (payload) => apiFetch(`${API_BASE_URL}/auth/guests/`, {
     method: 'POST',

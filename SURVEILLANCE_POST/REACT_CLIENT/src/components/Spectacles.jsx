@@ -1,7 +1,8 @@
 // spectacles component: list, import and manage issued spectacles/glasses
 // simple ui: upload excel, create/edit/delete, filter pending/completed
 import { useState, useEffect } from 'react';
-import { spectaclesAPI, personsAPI, API_BASE_URL, compagniesAPI } from '../services/api';
+import { spectaclesAPI, personsAPI, compagniesAPI } from '../services/api';
+import { personName, personPhotoUrl, showPlaceholderPhoto } from '../utils/person';
 import { useLang } from '../context/LangContext';
 
 const Spectacles = () => {
@@ -205,12 +206,12 @@ const Spectacles = () => {
   // helpers to display person name/id and main photo url
   const getPersonName = (personField) => {
     if (personField && typeof personField === 'object') {
-      return `${personField.prenom || ''} ${personField.nom || ''}`.trim() || T.na;
+      return personName(personField, T.na);
     }
 
     const personId = Number(personField);
     const person = persons.find((p) => p.id === personId);
-    return person ? `${person.prenom} ${person.nom}` : T.na;
+    return personName(person, T.na);
   };
 
   const getPersonId = (personField) => {
@@ -219,16 +220,6 @@ const Spectacles = () => {
   };
 
 
-    const getMainPhoto = (personField) => {
-    const pid = getPersonId(personField);
-    if (!pid) return '/main.svg';
-    return `${API_BASE_URL}/persons/${pid}/main-photo/`;
-  };
-
-  const handleCardImageError = (e) => {
-    e.currentTarget.onerror = null;
-    e.currentTarget.setAttribute('src', '/main.svg');
-  };
 
   const outingTitles = Array.from(
     new Set(
@@ -378,9 +369,9 @@ const Spectacles = () => {
             <article key={spectacle.id} className="person-split-card spectacle-split-card">
               <div className="person-split-photo">
                 <img
-                  src={getMainPhoto(spectacle.person)}
+                  src={personPhotoUrl(getPersonId(spectacle.person))}
                   alt={getPersonName(spectacle.person)}
-                  onError={handleCardImageError}
+                  onError={showPlaceholderPhoto}
                 />
               </div>
 

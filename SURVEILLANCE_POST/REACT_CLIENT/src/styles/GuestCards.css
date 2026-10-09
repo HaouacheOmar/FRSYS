@@ -48,22 +48,17 @@
 .guest-mini-status {
   font-size: 12px;
 }
-.status-dot {
-  position: absolute;
+/* Small dot on Home's mini cards (the generic .status-dot below is the Access Control one). */
+.guest-mini-photo .status-dot {
   bottom: 2px;
   right: 2px;
   width: 8px;
   height: 8px;
-  border-radius: 50%;
-  border: 1px solid #fff;
+  border-width: 1px;
   box-shadow: 0 1px 2px rgba(0,0,0,0.08);
 }
-.status-dot.online {
-  background: #4caf50;
-}
-.status-dot.offline {
-  background: #f44336;
-}.guest-cards-list {
+
+.guest-cards-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
   gap: 18px;

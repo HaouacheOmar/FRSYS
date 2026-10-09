@@ -1,5 +1,6 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { authAPI, configAPI, wsUrl } from '../services/api';
+import { useEffect, useState } from 'react';
+import { authAPI, configAPI } from '../services/api';
+import { useAdminNotifications } from '../hooks/useAdminNotifications';
 import { useLang } from '../context/LangContext';
 import '../styles/GuestCards.css';
 import userSvg from '../assets/users-svgrepo-com.svg';
@@ -25,7 +26,6 @@ const AccessControl = () => {
   const [photoPath, setPhotoPath] = useState('');
   const [zipFile, setZipFile] = useState(null);
 
-  const wsRef = useRef(null);
 
   const loadGuests = async () => {
     try {
@@ -36,46 +36,20 @@ const AccessControl = () => {
     }
   };
 
-  // Real-time: handle guest online/offline events
-// Real-time: handle guest online/offline events
-  useEffect(() => {
-    let ws;
-    if (user && user.role === 'admin') {
-      
-      ws = new WebSocket(wsUrl('/ws/admin/notifications/'));
-      
-      wsRef.current = ws;
-      ws.onopen = () => {
-        ws.send(JSON.stringify({ type: 'ping' }));
-      };
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type !== 'admin_notification') return;
-          if (data.event === 'guest_snapshot') {
-            const onlineMap = {};
-            (data.payload?.online_guests || []).forEach(g => { onlineMap[g.username] = true; });
-            setGuests(prev => prev.map(g => ({ ...g, is_online: !!onlineMap[g.username] })));
-            return;
-          }
-          if (data.event === 'guest_online' || data.event === 'guest_offline') {
-            const payload = data.payload || {};
-            setGuests(prev => prev.map(g =>
-              g.username === payload.username ? { ...g, is_online: payload.is_online, last_seen: payload.last_seen } : g
-            ));
-          }
-        } catch {}
-      };
-      ws.onclose = () => { wsRef.current = null; };
-    }
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
+  // Real-time: mark guests online/offline in the list
+  useAdminNotifications({
+    enabled: user?.role === 'admin',
+    onEvent: (event, payload) => {
+      if (event === 'guest_snapshot') {
+        const online = new Set((payload.online_guests || []).map((g) => g.username));
+        setGuests((prev) => prev.map((g) => ({ ...g, is_online: online.has(g.username) })));
+      } else if (event === 'guest_online' || event === 'guest_offline') {
+        setGuests((prev) => prev.map((g) =>
+          g.username === payload.username ? { ...g, is_online: payload.is_online, last_seen: payload.last_seen } : g
+        ));
       }
-    };
-  }, [user]);
-
+    },
+  });
 
   useEffect(() => {
     loadGuests();
@@ -84,7 +58,9 @@ const AccessControl = () => {
       try {
         const res = await configAPI.getPhotoPath();
         setPhotoPath(res.dir_path_photo || '');
-      } catch {}
+      } catch {
+        // photo path stays empty; the form still works
+      }
     })();
   }, []);
 

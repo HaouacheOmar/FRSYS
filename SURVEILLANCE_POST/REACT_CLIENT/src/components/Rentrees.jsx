@@ -1,12 +1,12 @@
 // rentrees component: shows recorded returns and listens to camera websocket
 // it can auto-detect returned items from websocket frames and refresh list
 import { useState, useEffect, useRef } from 'react';
-import { rentreesAPI, API_BASE_URL, compagniesAPI, wsUrl } from '../services/api';
+import { rentreesAPI, compagniesAPI } from '../services/api';
 import { useLang } from '../context/LangContext';
 import { useAuth } from '../context/AuthContext';
-import playIcon from '../assets/play-svgrepo-com.svg';
-import stopIcon from '../assets/stop-svgrepo-com.svg';
-import cameraIcon from '../assets/surveillance_cam.svg';
+import { useStreamSocket } from '../hooks/useStreamSocket';
+import { personName, personPhotoUrl, showPlaceholderPhoto } from '../utils/person';
+import { CameraStatusChip, CameraToggleButton } from './CameraControls';
 
 const Rentrees = () => {
   const { T } = useLang();
@@ -18,23 +18,8 @@ const Rentrees = () => {
   const [companies, setCompanies] = useState([]);
   const [companyFilter, setCompanyFilter] = useState('');
   const [returnsFilter, setReturnsFilter] = useState('all');
-  const [wsState, setWsState] = useState('disconnected');
   const [cameraEvents, setCameraEvents] = useState([]);
-  const wsRef = useRef(null);
   const refreshLockRef = useRef(false);
-
-  const getSocketLabel = (state) => {
-    if (state === 'connected') return T.connected;
-    if (state === 'connecting') return T.connecting;
-    if (state === 'disconnected') return T.disconnected;
-    return state;
-  };
-
-  const getSocketChipClass = (state) => {
-    if (state === 'connected') return 'camera-status-running';
-    if (state === 'connecting') return 'camera-status-checking';
-    return 'camera-status-stopped';
-  };
 
   useEffect(() => {
     loadRentrees();
@@ -48,15 +33,6 @@ const Rentrees = () => {
       setCompanyFilter('');
     }
   }, [isGuest]);
-
-  // cleanup socket on unmount
-  useEffect(() => {
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, []);
 
   const loadRentrees = async () => {
     try {
@@ -93,108 +69,31 @@ const Rentrees = () => {
     }, 1000);
   };
 
-  // connect to camera websocket and listen for return events
-  const connectCamera = () => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
-    setWsState('connecting');
-    const ws = new WebSocket(wsUrl('/ws/video/stream/'));
+  // Camera in 'return' mode: the backend records returns; show them as they happen.
+  const stream = useStreamSocket({
+    mode: 'return',
+    onFrame: (data) => {
+      if (!Array.isArray(data.detections)) return;
+      const returns = data.detections.filter((det) => {
+        const statusText = String(det?.status || det?.label || '').toUpperCase();
+        return statusText.includes('RETURNED - ON TIME') || statusText.includes('RETURNED - LATE');
+      });
+      if (returns.length === 0) return;
 
-    ws.onopen = () => {
-      setWsState('connected');
-      ws.send(JSON.stringify({ type: 'start', mode: 'return' }));
-    };
+      const entries = returns.map((det) => ({
+        id: `${det.matricule}-${Date.now()}`,
+        person: personName(det, det.matricule || T.unknown),
+        status: det.status,
+        time: det.date_rentree || new Date().toLocaleString(),
+      }));
+      // keep recent events at the top and limit to 8
+      setCameraEvents((prev) => [...entries, ...prev].slice(0, 8));
+      scheduleRentreesRefresh();
+    },
+  });
 
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type !== 'frame' || !Array.isArray(data.detections)) return;
-
-        // filter detections that indicate returned items
-        const returns = data.detections.filter((det) => {
-          const statusText = String(det?.status || det?.label || '').toUpperCase();
-          return statusText.includes('RETURNED - ON TIME') || statusText.includes('RETURNED - LATE');
-        });
-
-        if (returns.length > 0) {
-          const entries = returns.map((det) => ({
-            id: `${det.matricule}-${Date.now()}`,
-            person: `${det.prenom || ''} ${det.nom || ''}`.trim() || det.matricule || 'Unknown',
-            status: det.status,
-            time: det.date_rentree || new Date().toLocaleString(),
-          }));
-
-          // keep recent events at the top and limit to 8
-          setCameraEvents((prev) => [...entries, ...prev].slice(0, 8));
-          scheduleRentreesRefresh();
-        }
-      } catch {
-        // ignore malformed websocket messages
-      }
-    };
-
-    ws.onerror = () => {
-      setError(T.socketError);
-    };
-
-    ws.onclose = () => {
-      // A late close from a replaced socket must not tear down the new one.
-      if (wsRef.current !== ws) return;
-      setWsState('disconnected');
-      wsRef.current = null;
-    };
-
-    wsRef.current = ws;
-  };
-
-  const disconnectCamera = () => {
-    if (wsRef.current) {
-      wsRef.current.send(JSON.stringify({ type: 'stop' }));
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-    setWsState('disconnected');
-  };
-
-  const toggleCamera = () => {
-    if (wsState === 'connected') {
-      disconnectCamera();
-      return;
-    }
-    if (wsState !== 'connecting') {
-      connectCamera();
-    }
-  };
-
-  // small helpers to display person and photo
-  const getPersonInfo = (rentree) => {
-    const person = rentree?.spectacle?.person;
-    if (!person) return { name: T.unknown, id: null };
-    return {
-      name: `${person.prenom || ''} ${person.nom || ''}`.trim() || T.unknown,
-      id: person.id ?? null,
-    };
-  };
-
-  const getMainPhoto = (rentree) => {
-    if (isGuest) return '/main.svg';
-    const pid = rentree?.spectacle?.person?.id;
-    if (!pid) return '/main.svg';
-    return `${API_BASE_URL}/persons/${pid}/main-photo/`;
-  };
-
-  const handleCardImageError = (e) => {
-    e.currentTarget.onerror = null;
-    e.currentTarget.setAttribute('src', '/main.svg');
-  };
-
-  const getSpectacleInfo = (rentree) => {
-    const spectacle = rentree?.spectacle;
-    if (!spectacle) return T.na;
-
-    const person = spectacle.person;
-    const personName = person ? `${person.prenom} ${person.nom}` : T.unknown;
-    return `${personName} - ${spectacle.date_sortie}`;
-  };
+  // guests don't get person photos
+  const photoFor = (rentree) => personPhotoUrl(isGuest ? null : rentree?.spectacle?.person?.id);
 
   if (loading) return <div className="container"><p>{T.loading}</p></div>;
 
@@ -202,28 +101,17 @@ const Rentrees = () => {
     <div className="container">
       <h1>{T.rentreesTitle}</h1>
 
-      {error && <div className="error">{T.errorPrefix}: {error}</div>}
+      {(error || stream.error) && <div className="error">{T.errorPrefix}: {error || stream.error}</div>}
 
-      <div className="camera-status-row">
-        <span className={`camera-status-chip ${getSocketChipClass(wsState)}`}>
-          <img src={cameraIcon} alt="" className="camera-status-icon" aria-hidden="true" />
-          <span>{T.cameraStatus}: {getSocketLabel(wsState)}</span>
-        </span>
-      </div>
+      <CameraStatusChip state={stream.state} message={stream.statusMessage} />
 
       <div className="controls">
-        <button
-          className={`camera-toggle-btn ${wsState === 'connected' ? 'is-on' : ''} ${wsState === 'connecting' ? 'is-busy' : ''}`}
-          onClick={toggleCamera}
-          disabled={wsState === 'connecting'}
-          title={wsState === 'connected' ? T.stopCameraRecognition : T.startCameraRecognition}
-          aria-label={wsState === 'connected' ? T.stopCameraRecognition : T.startCameraRecognition}
-        >
-          <span className="camera-toggle-icons" aria-hidden="true">
-            <img src={playIcon} alt="" className="camera-toggle-icon play-icon" />
-            <img src={stopIcon} alt="" className="camera-toggle-icon stop-icon" />
-          </span>
-        </button>
+        <CameraToggleButton
+          state={stream.state}
+          onToggle={stream.toggle}
+          startLabel={T.startCameraRecognition}
+          stopLabel={T.stopCameraRecognition}
+        />
         {!isGuest && (
           <select className="control-select" value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)}>
             <option value="">{T.selectCompany}</option>
@@ -259,16 +147,16 @@ const Rentrees = () => {
             return Number(cid) === Number(companyFilter);
           })
           .map((rentree) => {
-          const { name } = getPersonInfo(rentree);
+          const name = personName(rentree?.spectacle?.person, T.unknown);
           const isLate = rentree.est_retard;
           const dateSortie = rentree?.spectacle?.date_sortie;
           return (
             <article key={rentree.id} className="person-split-card spectacle-split-card">
               <div className="person-split-photo">
                 <img
-                  src={getMainPhoto(rentree)}
+                  src={photoFor(rentree)}
                   alt={name}
-                  onError={handleCardImageError}
+                  onError={showPlaceholderPhoto}
                 />
               </div>
 

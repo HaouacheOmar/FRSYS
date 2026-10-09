@@ -6,7 +6,7 @@ import '../styles/Login.css';
 
 const Login = () => {
   const { login, isAuthenticated, isLoading, role } = useAuth();
-  const { T, toggle, lang } = useLang();
+  const { T, toggle } = useLang();
   const navigate = useNavigate();
   const location = useLocation();
 

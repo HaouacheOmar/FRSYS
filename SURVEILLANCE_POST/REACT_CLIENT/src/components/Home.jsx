@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useLang } from '../context/LangContext';
 import { useAuth } from '../context/AuthContext';
-import { wsUrl } from '../services/api';
+import { useAdminNotifications } from '../hooks/useAdminNotifications';
 import '../styles/Common.css';
 import { GuestMiniCard } from './GuestMiniCard';
 
@@ -10,84 +10,38 @@ const Home = () => {
   const { role } = useAuth();
   const [onlineGuests, setOnlineGuests] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  const [socketState, setSocketState] = useState('disconnected');
-  const wsRef = useRef(null);
 
   const notificationCount = useMemo(() => notifications.length, [notifications]);
-  const getSocketLabel = (state) => {
-    if (state === 'connected') return T.connected;
-    if (state === 'connecting') return T.connecting;
-    if (state === 'disconnected') return T.disconnected;
-    return state;
-  };
+  const socketLabel = { connected: T.connected, connecting: T.connecting, disconnected: T.disconnected };
 
-  useEffect(() => {
-    if (role !== 'admin') {
-      return undefined;
-    }
-
-    setSocketState('connecting');
-    
-    const ws = new WebSocket(wsUrl('/ws/admin/notifications/'));
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      setSocketState('connected');
-      ws.send(JSON.stringify({ type: 'ping' }));
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type !== 'admin_notification') return;
-
-        if (data.event === 'guest_snapshot') {
-          setOnlineGuests(data.payload?.online_guests || []);
-          return;
-        }
-
-        if (data.event === 'guest_online' || data.event === 'guest_offline') {
-          const payload = data.payload || {};
-          setNotifications((prev) => [
-            {
-              id: `${payload.user_id}-${Date.now()}`,
-              event: data.event,
-              username: payload.username,
-              at: new Date().toLocaleTimeString(),
-            },
-            ...prev,
-          ].slice(0, 12));
-
-          setOnlineGuests((prev) => {
-            const withoutUser = prev.filter((guest) => guest.user_id !== payload.user_id);
-            if (data.event === 'guest_online') {
-              return [...withoutUser, payload].sort((a, b) => a.username.localeCompare(b.username));
-            }
-            return withoutUser;
-          });
-        }
-      } catch {
-        // ignore JSON parse errors
+  const socketState = useAdminNotifications({
+    enabled: role === 'admin',
+    onEvent: (event, payload) => {
+      if (event === 'guest_snapshot') {
+        setOnlineGuests(payload.online_guests || []);
+        return;
       }
-    };
+      if (event !== 'guest_online' && event !== 'guest_offline') return;
 
-    ws.onerror = () => {
-      setSocketState('error');
-    };
+      setNotifications((prev) => [
+        {
+          id: `${payload.user_id}-${Date.now()}`,
+          event,
+          username: payload.username,
+          at: new Date().toLocaleTimeString(),
+        },
+        ...prev,
+      ].slice(0, 12));
 
-    ws.onclose = () => {
-      setSocketState('disconnected');
-      wsRef.current = null;
-    };
-
-    return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
-    };
-  }, [role]);
-
+      setOnlineGuests((prev) => {
+        const withoutUser = prev.filter((guest) => guest.user_id !== payload.user_id);
+        if (event === 'guest_online') {
+          return [...withoutUser, payload].sort((a, b) => a.username.localeCompare(b.username));
+        }
+        return withoutUser;
+      });
+    },
+  });
 
   return (
     <div className="container">
@@ -100,7 +54,7 @@ const Home = () => {
         {role === 'admin' && (
           <div style={{ margin: '0 0 24px', textAlign: 'left' }}>
             <div className={`status ${socketState}`} style={{ marginBottom: 10 }}>
-              {T.guestNotificationSocket}: {getSocketLabel(socketState)}
+              {T.guestNotificationSocket}: {socketLabel[socketState] || socketState}
             </div>
             <div className="form-container" style={{ marginBottom: 16 }}>
               <h2 style={{ marginTop: 0 }}>{T.guestsOnline} ({onlineGuests.length})</h2>

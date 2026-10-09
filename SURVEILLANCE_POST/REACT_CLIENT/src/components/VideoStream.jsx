@@ -1,209 +1,38 @@
-// imports: react hooks, language translations, and styles
-import { useState, useEffect, useRef } from 'react';
+import { useRef, useState } from 'react';
 import { useLang } from '../context/LangContext';
-import { wsUrl } from '../services/api';
-import playIcon from '../assets/play-svgrepo-com.svg';
-import stopIcon from '../assets/stop-svgrepo-com.svg';
-import cameraIcon from '../assets/surveillance_cam.svg';
+import { useStreamSocket } from '../hooks/useStreamSocket';
+import { CameraStatusChip, CameraToggleButton } from './CameraControls';
 import '../styles/VideoStream.css';
 
-// video stream component: connects to a websocket, shows frames,
-// displays detections and simple connection controls.
+// Live camera view: frames, fps and the detections list.
 const VideoStream = () => {
-  // translation helper
   const { T } = useLang();
-
-  // websocket and ui state
-  const [ws, setWs] = useState(null);
-  const [status, setStatus] = useState({ state: 'disconnected', message: T.disconnected });
   const [fps, setFps] = useState(0);
-  const [faceCount, setFaceCount] = useState(0);
   const [detections, setDetections] = useState([]);
-  const [error, setError] = useState('');
   const [frameSrc, setFrameSrc] = useState(null);
 
-  // frame counting for fps calculation
-  const [frameCount, setFrameCount] = useState(0);
-  const lastFpsUpdate = useRef(Date.now());
-
-  // refs to keep websocket instance between renders
-  const wsRef = useRef(null);
-
-  const WS_URL = wsUrl('/ws/video/stream/');
-
-  // update connection status text shown in the ui
-  const updateStatus = (state, message) => {
-    setStatus({ state, message });
-  };
-
-  const getSocketChipClass = (state) => {
-    if (state === 'connected') return 'camera-status-running';
-    if (state === 'connecting') return 'camera-status-checking';
-    return 'camera-status-stopped';
-  };
-
-  // show a transient error message for 5s
-  const showError = (message) => {
-    setError(message);
-    setTimeout(() => setError(''), 5000);
-  };
-
-  // increment frame counter and compute fps every ~1000ms
-  const updateFps = () => {
-    setFrameCount(prev => {
-      const count = prev + 1;
-      const now = Date.now();
-      const elapsed = now - lastFpsUpdate.current;
-
-      if (elapsed >= 1000) {
-        const currentFps = Math.round((count * 1000) / elapsed);
-        setFps(currentFps);
-        lastFpsUpdate.current = now;
-        return 0;
-      }
-      return count;
-    });
-  };
-
-  // handle messages coming from the server via ws
-  const handleMessage = (data) => {
-    switch(data.type) {
-      case 'frame':
-        // image frame with optional detections
-        displayFrame(data);
-        updateDetections(data.detections);
-        updateFps();
-        break;
-
-      case 'error':
-        // server reported an error
-        showError(data.message);
-        break;
-
-      case 'connection':
-      case 'status':
-        // informational messages
-        console.log(data.message);
-        break;
-
-      case 'pong':
-        // keepalive acknowledgement, ignore
-        break;
-
-      default:
-        console.log('Unknown message type:', data.type);
+  // fps = frames received per ~1s window
+  const framesInWindow = useRef(0);
+  const windowStart = useRef(0);
+  const countFrame = () => {
+    const now = performance.now();
+    framesInWindow.current += 1;
+    const elapsed = now - windowStart.current;
+    if (elapsed >= 1000) {
+      setFps(Math.round((framesInWindow.current * 1000) / elapsed));
+      framesInWindow.current = 0;
+      windowStart.current = now;
     }
   };
 
-  // set frame data for render
-  const displayFrame = (data) => {
-    if (data?.image) {
-      setFrameSrc('data:image/jpeg;base64,' + data.image);
-    }
-  };
-
-  // normalize detections: ensure array, update count and list
-  const updateDetections = (detectionData) => {
-    if (!Array.isArray(detectionData)) {
-      setFaceCount(0);
-      setDetections([]);
-      return;
-    }
-
-    setFaceCount(detectionData.length);
-    setDetections(detectionData);
-  };
-
-  // open a websocket connection and wire event handlers
-  const connectWebSocket = () => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      console.log(T.alreadyConnected);
-      return;
-    }
-
-    updateStatus('connecting', T.connecting);
-
-    try {
-      const websocket = new WebSocket(WS_URL);
-
-      websocket.onopen = () => {
-        // notify server to start streaming frames
-        console.log('WebSocket connected');
-        updateStatus('connected', T.connected);
-        websocket.send(JSON.stringify({ type: 'start' }));
-      };
-
-      websocket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          handleMessage(data);
-        } catch (e) {
-          console.error('Error parsing message:', e);
-        }
-      };
-
-      websocket.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        showError(T.websocketErrorOccurred);
-      };
-
-      websocket.onclose = () => {
-        // A late close from a replaced socket must not tear down the new one.
-        if (wsRef.current !== websocket) return;
-        console.log('WebSocket closed');
-        updateStatus('disconnected', T.disconnected);
-        wsRef.current = null;
-        setWs(null);
-        setFrameSrc(null);
-      };
-
-      wsRef.current = websocket;
-      setWs(websocket);
-    } catch (e) {
-      console.error('Error creating WebSocket:', e);
-      showError(T.websocketConnectionFailed);
-      updateStatus('disconnected', T.disconnected);
-    }
-  };
-
-  // ask server to stop and then close the socket
-  const disconnectWebSocket = () => {
-    if (wsRef.current) {
-      wsRef.current.send(JSON.stringify({ type: 'stop' }));
-      wsRef.current.close();
-      wsRef.current = null;
-      setWs(null);
-    }
-    updateStatus('disconnected', T.disconnected);
-    setFrameSrc(null);
-  };
-
-  const toggleWebSocket = () => {
-    if (status.state === 'connected') {
-      disconnectWebSocket();
-      return;
-    }
-    if (status.state !== 'connecting') {
-      connectWebSocket();
-    }
-  };
-
-  // keepalive ping every 30s and cleanup on unmount
-  useEffect(() => {
-    const pingInterval = setInterval(() => {
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        wsRef.current.send(JSON.stringify({ type: 'ping' }));
-      }
-    }, 30000);
-
-    // cleanup when component unmounts
-    return () => {
-      clearInterval(pingInterval);
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-    };
-  }, []);
+  const stream = useStreamSocket({
+    onFrame: (data) => {
+      if (data.image) setFrameSrc('data:image/jpeg;base64,' + data.image);
+      setDetections(Array.isArray(data.detections) ? data.detections : []);
+      countFrame();
+    },
+    onStop: () => setFrameSrc(null),
+  });
 
   // render a single detection box in the side panel
   const renderDetectionItem = (det, index) => {
@@ -217,27 +46,18 @@ const VideoStream = () => {
       );
     }
 
-    // full person info available: show name, matricule, company and status
-    if (det.matricule && det.nom && det.prenom) {
-      const status = det.status || 'UNKNOWN';
-      const statusClass = status.includes('ELIGIBLE') ? '' : 'no-match';
-      const compagnie = det.compagnie || 'N/A';
-      return (
-        <div key={index} className={`detection-item ${statusClass}`}>
-          <strong>{T.face} {index + 1}:</strong> {det.prenom} {det.nom}<br />
-          <small>{T.matricule}: {det.matricule} | {T.company}: {compagnie} | {T.statusLabel}: {status}</small>
-        </div>
-      );
-    }
-
-    // partial info: name but no matricule
+    // recognized person: name, status, plus matricule/company when known
     if (det.nom && det.prenom) {
       const status = det.status || 'UNKNOWN';
-      const statusClass = status.includes('ELIGIBLE') ? '' : 'no-match';
+      // backend statuses: IN SPECTACLE / RETURNED - … (expected) vs NOT ON SPECTACLE (not)
+      const statusClass = /IN SPECTACLE|RETURNED/.test(status) ? '' : 'no-match';
       return (
         <div key={index} className={`detection-item ${statusClass}`}>
           <strong>{T.face} {index + 1}:</strong> {det.prenom} {det.nom}<br />
-          <small>{T.statusLabel}: {status}</small>
+          <small>
+            {det.matricule && <>{T.matricule}: {det.matricule} | {T.company}: {det.compagnie || 'N/A'} | </>}
+            {T.statusLabel}: {status}
+          </small>
         </div>
       );
     }
@@ -264,32 +84,16 @@ const VideoStream = () => {
     <div className="container">
       <h1>{T.videoStreamTitle}</h1>
 
-      <div className="camera-status-row">
-        <span className={`camera-status-chip ${getSocketChipClass(status.state)}`}>
-          <img src={cameraIcon} alt="" className="camera-status-icon" aria-hidden="true" />
-          <span>{T.cameraStatus}: {status.message}</span>
-        </span>
-      </div>
+      <CameraStatusChip state={stream.state} message={stream.statusMessage} />
 
-      {error && (
+      {stream.error && (
         <div className="error">
-          {T.errorPrefix}: {error}
+          {T.errorPrefix}: {stream.error}
         </div>
       )}
 
       <div className="controls">
-        <button
-          className={`camera-toggle-btn ${status.state === 'connected' ? 'is-on' : ''} ${status.state === 'connecting' ? 'is-busy' : ''}`}
-          onClick={toggleWebSocket}
-          disabled={status.state === 'connecting'}
-          title={status.state === 'connected' ? T.disconnect : T.connect}
-          aria-label={status.state === 'connected' ? T.disconnect : T.connect}
-        >
-          <span className="camera-toggle-icons" aria-hidden="true">
-            <img src={playIcon} alt="" className="camera-toggle-icon play-icon" />
-            <img src={stopIcon} alt="" className="camera-toggle-icon stop-icon" />
-          </span>
-        </button>
+        <CameraToggleButton state={stream.state} onToggle={stream.toggle} startLabel={T.connect} stopLabel={T.disconnect} />
       </div>
 
       <div className="video-container">
@@ -297,7 +101,7 @@ const VideoStream = () => {
       </div>
 
       <div className="info">
-        {T.fpsLabel}: <span>{fps}</span> | {T.facesDetectedLabel}: <span>{faceCount}</span>
+        {T.fpsLabel}: <span>{fps}</span> | {T.facesDetectedLabel}: <span>{detections.length}</span>
       </div>
 
       <div className="detections">

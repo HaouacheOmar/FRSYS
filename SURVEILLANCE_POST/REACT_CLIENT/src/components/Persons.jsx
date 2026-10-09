@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { personsAPI, compagniesAPI, API_BASE_URL } from '../services/api';
+import { personsAPI, compagniesAPI } from '../services/api';
+import { personName, personPhotoUrl, showPlaceholderPhoto } from '../utils/person';
 import { useLang } from '../context/LangContext';
 
 const Persons = () => {
@@ -107,15 +108,6 @@ const Persons = () => {
     return company?.label || 'N/A';
   };
 
-  const getMainPhoto = (person) => {
-    if (!person?.id) return '/main.svg';
-    return `${API_BASE_URL}/persons/${person.id}/main-photo/`;
-  };
-
-  const handleCardImageError = (e) => {
-    e.currentTarget.onerror = null;
-    e.currentTarget.setAttribute('src', '/main.svg');
-  };
 
   const filteredPersons = companyFilter
     ? persons.filter((person) => {
@@ -213,9 +205,9 @@ const Persons = () => {
           <article key={person.id} className="person-split-card">
             <div className="person-split-photo">
               <img
-                src={getMainPhoto(person)}
-                alt={`${person.prenom} ${person.nom}`}
-                onError={handleCardImageError}
+                src={personPhotoUrl(person.id)}
+                alt={personName(person)}
+                onError={showPlaceholderPhoto}
               />
             </div>
 
