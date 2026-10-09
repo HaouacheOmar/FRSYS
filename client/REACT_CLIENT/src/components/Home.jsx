@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { AnimatePresence, motion } from 'motion/react';
 import { useLang } from '../context/LangContext';
 import { useAuth } from '../context/AuthContext';
 import { useAdminNotifications } from '../hooks/useAdminNotifications';
@@ -43,104 +45,86 @@ const Home = () => {
     },
   });
 
+  const features = [
+    { to: '/video-stream/', title: T.homeVideoStream, text: T.homeVideoStreamDesc },
+    { to: '/check-ins/', title: T.homeCheckIns, text: T.homeCheckInsDesc },
+    { to: '/rentrees/', title: T.homeReturns, text: T.homeReturnsDesc },
+    { to: '/spectacles/', title: T.homeSpectacles, text: T.homeSpectaclesDesc },
+    { to: '/persons/', title: T.homePersons, text: T.homePersonsDesc },
+    { to: '/compagnies/', title: T.homeCompanies, text: T.homeCompaniesDesc },
+    { to: '/cameras/', title: T.homeCameras, text: T.homeCamerasDesc },
+  ];
+
   return (
     <div className="container">
       <h1>{T.homeTitle}</h1>
-      <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-        <p style={{ fontSize: '18px', color: '#666', marginBottom: '30px' }}>
-          {T.homeWelcome}
-        </p>
+      <p className="page-subtitle">{T.homeWelcome}</p>
 
-        {role === 'admin' && (
-          <div style={{ margin: '0 0 24px', textAlign: 'left' }}>
-            <div className={`status ${socketState}`} style={{ marginBottom: 10 }}>
+      {role === 'admin' && (
+        <>
+          <div className="panel">
+            <h2>{T.guestsOnline} ({onlineGuests.length})</h2>
+            <div className={`status ${socketState}`}>
               {T.guestNotificationSocket}: {socketLabel[socketState] || socketState}
             </div>
-            <div className="form-container" style={{ marginBottom: 16 }}>
-              <h2 style={{ marginTop: 0 }}>{T.guestsOnline} ({onlineGuests.length})</h2>
-              {onlineGuests.length === 0 ? (
-                <p>{T.noGuestsOnline}</p>
-              ) : (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: 8 }}>
+            {onlineGuests.length === 0 ? (
+              <p className="empty-state">{T.noGuestsOnline}</p>
+            ) : (
+              <motion.div className="guest-mini-list" layout>
+                <AnimatePresence initial={false}>
                   {onlineGuests.map((guest) => (
-                    <GuestMiniCard
+                    <motion.div
                       key={guest.user_id}
-                      username={guest.username}
-                      is_online={true}
-                    />
+                      layout
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.15 } }}
+                    >
+                      <GuestMiniCard username={guest.username} is_online />
+                    </motion.div>
                   ))}
-                </div>
-              )}
-            </div>
-            <div className="form-container">
-              <h2 style={{ marginTop: 0 }}>{T.guestNotifications} ({notificationCount})</h2>
-              {notifications.length === 0 ? (
-                <p>{T.noGuestActivity}</p>
-              ) : (
-                <div className="detections-list">
-                  {notifications.map((note) => (
-                    <div key={note.id} className="detection-item">
-                      <strong>{note.username}</strong> {note.event === 'guest_online' ? T.guestConnectedAt : T.guestDisconnectedAt} {note.at}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                </AnimatePresence>
+              </motion.div>
+            )}
           </div>
-        )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px', marginTop: '40px' }}>
-          <div className="feature-card">
-            <h3>{T.homeVideoStream}</h3>
-            <p>{T.homeVideoStreamDesc}</p>
+          <div className="panel">
+            <h2>{T.guestNotifications} ({notificationCount})</h2>
+            {notifications.length === 0 ? (
+              <p className="empty-state">{T.noGuestActivity}</p>
+            ) : (
+              <div className="detections-list">
+                <AnimatePresence initial={false}>
+                  {notifications.map((note) => (
+                    <motion.div
+                      key={note.id}
+                      layout
+                      className={`detection-item${note.event === 'guest_online' ? '' : ' no-match'}`}
+                      initial={{ opacity: 0, y: -8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                    >
+                      <strong>{note.username}</strong>{' '}
+                      {note.event === 'guest_online' ? T.guestConnectedAt : T.guestDisconnectedAt}{' '}
+                      <span className="mono">{note.at}</span>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            )}
           </div>
-          <div className="feature-card">
-            <h3>{T.homeCheckIns}</h3>
-            <p>{T.homeCheckInsDesc}</p>
-          </div>
-          <div className="feature-card">
-            <h3>{T.homeCompanies}</h3>
-            <p>{T.homeCompaniesDesc}</p>
-          </div>
-          <div className="feature-card">
-            <h3>{T.homePersons}</h3>
-            <p>{T.homePersonsDesc}</p>
-          </div>
-          <div className="feature-card">
-            <h3>{T.homeCameras}</h3>
-            <p>{T.homeCamerasDesc}</p>
-          </div>
-          <div className="feature-card">
-            <h3>{T.homeSpectacles}</h3>
-            <p>{T.homeSpectaclesDesc}</p>
-          </div>
-          <div className="feature-card">
-            <h3>{T.homeReturns}</h3>
-            <p>{T.homeReturnsDesc}</p>
-          </div>
-        </div>
+        </>
+      )}
+
+      <div className="feature-grid">
+        {features.map(({ to, title, text }) => (
+          <Link key={to} to={to} className="feature-card">
+            <h3>{title}</h3>
+            <p>{text}</p>
+            <span className="feature-arrow" aria-hidden="true">→</span>
+          </Link>
+        ))}
       </div>
-      <style>{`
-        .feature-card {
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          padding: 30px;
-          border-radius: 8px;
-          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-          transition: transform 0.3s;
-        }
-        .feature-card:hover {
-          transform: translateY(-5px);
-        }
-        .feature-card h3 {
-          margin: 0 0 10px 0;
-          color: white;
-        }
-        .feature-card p {
-          margin: 0;
-          font-size: 14px;
-        }
-      `}</style>
     </div>
   );
 };

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LangContext';
+import logo from '../assets/logo_app.svg';
 import '../styles/Login.css';
 
 const Login = () => {
@@ -43,16 +44,14 @@ const Login = () => {
 
   return (
     <div className="auth-page">
-      <button
-        type="button"
-        className="lang-toggle-btn"
-        onClick={toggle}
-        style={{ position: 'absolute', top: 24, right: 32, zIndex: 10 }}
-        aria-label="Toggle language"
-      >
+      <button type="button" className="auth-lang-toggle" onClick={toggle} aria-label="Toggle language">
         {T.toggleLang}
       </button>
       <div className="auth-card">
+        <div className="auth-brand">
+          <img src={logo} alt="" aria-hidden="true" />
+          <span>{T.appTitle}</span>
+        </div>
         <h1>{T.signInTitle}</h1>
         <p>{T.signInSubtitle}</p>
 
@@ -66,6 +65,8 @@ const Login = () => {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              autoFocus
               required
             />
           </div>
@@ -77,6 +78,7 @@ const Login = () => {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
               required
             />
           </div>
@@ -86,7 +88,7 @@ const Login = () => {
           </button>
         </form>
 
-        <p style={{ marginTop: 12 }}>
+        <p className="auth-footer">
           {T.haveRegistrationToken} <Link to="/register-with-token">{T.createAccount}</Link>
         </p>
       </div>

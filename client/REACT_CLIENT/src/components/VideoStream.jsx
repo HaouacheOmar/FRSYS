@@ -96,23 +96,36 @@ const VideoStream = () => {
         <CameraToggleButton state={stream.state} onToggle={stream.toggle} startLabel={T.connect} stopLabel={T.disconnect} />
       </div>
 
-      <div className="video-container">
-        <img id="videoFrame" src={frameSrc || undefined} alt={T.videoStreamTitle} />
-      </div>
-
-      <div className="info">
-        {T.fpsLabel}: <span>{fps}</span> | {T.facesDetectedLabel}: <span>{detections.length}</span>
-      </div>
-
-      <div className="detections">
-        <h3>{T.detectionsTitle}:</h3>
-        <div className="detections-list">
-          {detections.length === 0 ? (
-            <p style={{ color: '#999', textAlign: 'center' }}>{T.noFacesText}</p>
-          ) : (
-            detections.map((det, index) => renderDetectionItem(det, index))
-          )}
+      <div className="video-layout">
+        <div>
+          <div className="video-container">
+            {frameSrc ? (
+              <>
+                <img id="videoFrame" src={frameSrc} alt={T.videoStreamTitle} />
+                <span className="live-badge">LIVE</span>
+              </>
+            ) : (
+              <div className="video-placeholder">{stream.statusMessage}</div>
+            )}
+          </div>
+          <div className="info">
+            <div>{T.fpsLabel}: <span>{fps}</span></div>
+            <div>{T.facesDetectedLabel}: <span>{detections.length}</span></div>
+          </div>
         </div>
+
+        <aside className="video-side panel">
+          <div className="detections">
+            <h3>{T.detectionsTitle}</h3>
+            <div className="detections-list">
+              {detections.length === 0 ? (
+                <p className="empty-state">{T.noFacesText}</p>
+              ) : (
+                detections.map((det, index) => renderDetectionItem(det, index))
+              )}
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   );

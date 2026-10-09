@@ -1,4 +1,5 @@
-import { BrowserRouter as Router, Navigate, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Navigate, Routes, Route, useLocation } from 'react-router-dom';
+import { motion } from 'motion/react';
 import { LangProvider, useLang } from './context/LangContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import Navigation from './components/Navigation';
@@ -20,12 +21,20 @@ function AppContent() {
   const { lang } = useLang();
   const { role, isAuthenticated } = useAuth();
 
+  const location = useLocation();
   const defaultRoute = role === 'guest' ? '/video-stream/' : '/home';
 
   return (
     <div className="app" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       {isAuthenticated && <Navigation />}
-      <Routes>
+      {/* Each page fades in; keyed by path so it replays on navigation. */}
+      <motion.main
+        key={location.pathname}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+      >
+      <Routes location={location}>
         <Route path="/" element={<Navigate to={isAuthenticated ? defaultRoute : '/login'} replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register-with-token" element={<RegisterWithToken />} />
@@ -104,6 +113,7 @@ function AppContent() {
         />
         <Route path="*" element={<Navigate to={isAuthenticated ? defaultRoute : '/login'} replace />} />
       </Routes>
+      </motion.main>
     </div>
   );
 }

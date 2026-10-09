@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { useLang } from '../context/LangContext';
 import { useStreamSocket } from '../hooks/useStreamSocket';
 import { CameraStatusChip, CameraToggleButton } from './CameraControls';
@@ -37,7 +38,17 @@ const CheckIns = () => {
     const statusColor = STATE_COLOR[state] || 'red';
 
     return (
-      <div key={index} className="person-card">
+      <motion.div
+        // stable per recognized person, so only arrivals/departures animate, not every frame
+        // (unknown faces share labels like "No match", so they are keyed by position)
+        key={detection.matricule ? `mat-${detection.matricule}` : `face-${index}`}
+        layout
+        className="person-card"
+        initial={{ opacity: 0, scale: 0.96, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.15 } }}
+        transition={{ type: 'spring', bounce: 0, visualDuration: 0.3 }}
+      >
         <div className="person-card-info">
           <div className="person-info">
             <div className="person-header">
@@ -90,7 +101,7 @@ const CheckIns = () => {
             <div className="status-pulse"></div>
           </div>
         </div>
-      </div>
+      </motion.div>
     );
   };
 
@@ -121,7 +132,9 @@ const CheckIns = () => {
             </div>
           ) : (
             <div className="detections-grid">
-              {detections.map((det, index) => renderPersonCard(det, index))}
+              <AnimatePresence initial={false} mode="popLayout">
+                {detections.map((det, index) => renderPersonCard(det, index))}
+              </AnimatePresence>
             </div>
           )}
         </div>

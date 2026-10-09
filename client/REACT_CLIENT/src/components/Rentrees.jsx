@@ -1,6 +1,7 @@
 // rentrees component: shows recorded returns and listens to camera websocket
 // it can auto-detect returned items from websocket frames and refresh list
 import { useState, useEffect, useRef } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
 import { rentreesAPI, compagniesAPI } from '../services/api';
 import { useLang } from '../context/LangContext';
 import { useAuth } from '../context/AuthContext';
@@ -127,14 +128,25 @@ const Rentrees = () => {
       </div>
 
       {cameraEvents.length > 0 && (
-        <div className="detections">
+        <div className="detections panel">
           <h3>{T.recentEvents}</h3>
           <div className="detections-list">
-            {cameraEvents.map((evt) => (
-              <div key={evt.id} className="detection-item">
-                <strong>{evt.person}</strong> - {evt.status} - {evt.time}
-              </div>
-            ))}
+            <AnimatePresence initial={false}>
+              {cameraEvents.map((evt) => (
+                <motion.div
+                  key={evt.id}
+                  layout
+                  // a late return is the one the guard must notice
+                  className={`detection-item${String(evt.status).includes('LATE') ? ' no-match' : ''}`}
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ type: 'spring', bounce: 0, visualDuration: 0.3 }}
+                >
+                  <strong>{evt.person}</strong> · {evt.status} · <span className="mono">{evt.time}</span>
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
         </div>
       )}

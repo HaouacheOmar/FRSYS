@@ -1,27 +1,205 @@
+/* FRSYS design tokens. Every color, size and duration in the app comes from here.
+   Light is the default; dark follows the OS setting. See SYSTEM_DESIGN.md. */
+
 :root {
-  font-family: Arial, sans-serif;
+  /* Typography: Fira Sans for UI, Fira Code for data (matricules, times, IDs, URLs),
+     IBM Plex Sans Arabic for the RTL interface (Fira has no Arabic glyphs). */
+  --font-sans: 'Fira Sans', 'IBM Plex Sans Arabic', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Fira Code', ui-monospace, 'Cascadia Code', Consolas, monospace;
+
+  --text-xs: 0.75rem;   /* 12 */
+  --text-sm: 0.875rem;  /* 14 */
+  --text-md: 1rem;      /* 16, body */
+  --text-lg: 1.125rem;  /* 18 */
+  --text-xl: 1.375rem;  /* 22 */
+  --text-2xl: 1.75rem;  /* 28, page title */
+
+  /* Spacing: 4px grid */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 999px;
+
+  /* Motion: short for feedback, longer for things entering the page; no overshoot (data UI). */
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --control-height: 44px;   /* minimum touch target */
+  --page-max: 1240px;
+
+  /* Light theme */
+  --color-bg: #f1f5f9;
+  --color-bg-accent: radial-gradient(1200px 600px at 10% -10%, #dbeafe 0%, transparent 60%),
+    radial-gradient(900px 500px at 110% 0%, #dcfce7 0%, transparent 55%);
+  --color-surface: #ffffff;
+  --color-surface-2: #f8fafc;
+  --color-surface-3: #eef2f7;
+  --color-text: #0f172a;
+  --color-text-muted: #475569;
+  --color-text-subtle: #64748b;
+  --color-border: #e2e8f0;
+  --color-border-strong: #cbd5e1;
+
+  --color-primary: #2563eb;
+  --color-primary-hover: #1d4ed8;
+  --color-on-primary: #ffffff;
+  --color-accent: #16a34a;          /* "go": create, start, connect */
+  --color-accent-hover: #15803d;
+  --color-on-accent: #ffffff;
+  --color-danger: #dc2626;
+  --color-danger-hover: #b91c1c;
+  --color-on-danger: #ffffff;
+
+  /* Status: tinted background + strong text, AA on both themes */
+  --status-success-bg: #dcfce7;
+  --status-success-fg: #166534;
+  --status-success-solid: #16a34a;
+  --status-warning-bg: #fef3c7;
+  --status-warning-fg: #92400e;
+  --status-warning-solid: #d97706;
+  --status-danger-bg: #fee2e2;
+  --status-danger-fg: #991b1b;
+  --status-danger-solid: #dc2626;
+  --status-info-bg: #dbeafe;
+  --status-info-fg: #1e40af;
+  --status-neutral-bg: #f1f5f9;
+  --status-neutral-fg: #334155;
+
+  --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.45);
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 18px 40px rgba(15, 23, 42, 0.14);
+  --glass-bg: rgba(255, 255, 255, 0.78);
+  --glass-border: rgba(15, 23, 42, 0.08);
+  --code-bg: #0f172a;
+  --code-fg: #7dd3fc;
+
+  color-scheme: light dark;
+  font-family: var(--font-sans);
+  font-size: 100%;
   line-height: 1.5;
-  font-weight: 400;
+  color: var(--color-text);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-* {
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0b1120;
+    --color-bg-accent: radial-gradient(1200px 600px at 10% -10%, rgba(37, 99, 235, 0.18) 0%, transparent 60%),
+      radial-gradient(900px 500px at 110% 0%, rgba(34, 197, 94, 0.10) 0%, transparent 55%);
+    --color-surface: #131c2e;
+    --color-surface-2: #182237;
+    --color-surface-3: #1f2a42;
+    --color-text: #f1f5f9;
+    --color-text-muted: #a8b4c7;
+    --color-text-subtle: #8a98ad;
+    --color-border: #24314a;
+    --color-border-strong: #33425f;
+
+    --color-primary: #3b82f6;
+    --color-primary-hover: #60a5fa;
+    --color-on-primary: #ffffff;
+    --color-accent: #22c55e;
+    --color-accent-hover: #4ade80;
+    --color-on-accent: #052e16;
+    --color-danger: #ef4444;
+    --color-danger-hover: #f87171;
+    --color-on-danger: #ffffff;
+
+    --status-success-bg: rgba(34, 197, 94, 0.14);
+    --status-success-fg: #4ade80;
+    --status-success-solid: #22c55e;
+    --status-warning-bg: rgba(245, 158, 11, 0.16);
+    --status-warning-fg: #fbbf24;
+    --status-warning-solid: #f59e0b;
+    --status-danger-bg: rgba(239, 68, 68, 0.16);
+    --status-danger-fg: #f87171;
+    --status-danger-solid: #ef4444;
+    --status-info-bg: rgba(59, 130, 246, 0.16);
+    --status-info-fg: #93c5fd;
+    --status-neutral-bg: rgba(148, 163, 184, 0.14);
+    --status-neutral-fg: #cbd5e1;
+
+    --focus-ring: 0 0 0 3px rgba(96, 165, 250, 0.55);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 22px 48px rgba(0, 0, 0, 0.5);
+    --glass-bg: rgba(15, 23, 42, 0.72);
+    --glass-border: rgba(148, 163, 184, 0.14);
+    --code-bg: #020617;
+  }
+}
+
+*,
+*::before,
+*::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
 body {
-  margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background-color: #f0f0f0;
+  background: var(--color-bg-accent), var(--color-bg);
+  background-attachment: fixed;
+  color: var(--color-text);
+  font-size: var(--text-md);
 }
 
 a {
+  color: var(--color-primary);
   text-decoration: none;
-  color: inherit;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+img {
+  max-width: 100%;
+}
+
+code,
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Keyboard focus is always visible; mouse clicks don't draw rings. */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+::selection {
+  background: rgba(37, 99, 235, 0.25);
+}
+
+/* Respect "reduce motion": keep state changes, drop movement. Motion components follow
+   the same setting through <MotionConfig reducedMotion="user"> in main.jsx. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
 }

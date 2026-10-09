@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { authAPI } from '../services/api';
 import { useLang } from '../context/LangContext';
+import logo from '../assets/logo_app.svg';
 import '../styles/Login.css';
 
 const RegisterWithToken = () => {
@@ -34,6 +35,10 @@ const RegisterWithToken = () => {
   return (
     <div className="auth-page">
       <div className="auth-card">
+        <div className="auth-brand">
+          <img src={logo} alt="" aria-hidden="true" />
+          <span>{T.appTitle}</span>
+        </div>
         <h1>{T.registerWithTokenTitle}</h1>
         <p>{T.registerWithTokenSubtitle}</p>
 
@@ -77,7 +82,7 @@ const RegisterWithToken = () => {
           </button>
         </form>
 
-        <p style={{ marginTop: 12 }}>
+        <p className="auth-footer">
           {T.alreadyRegistered} <Link to="/login">{T.signInLower}</Link>
         </p>
       </div>

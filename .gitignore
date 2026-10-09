@@ -111,3 +111,9 @@ CLAUDE.md
 # Face photos used by Docker (biometric data: never commit)
 docker/photos/*
 !docker/photos/.gitkeep
+
+# Local browser-test output
+.playwright-mcp/
+
+# /brag showcase video output (rendered locally)
+brag-output*/

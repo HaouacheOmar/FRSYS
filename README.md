@@ -27,7 +27,7 @@ The interface is available in French/English and Arabic (right-to-left).
 
 - **Django server** (`servers/DJANGO_SERVER`): REST API, authentication, and the live camera stream over WebSockets. It reads the RTSP camera and sends frames to the model server for recognition. Then it matches each recognised person against their outings and records returns.
 - **Model server** (`servers/MODEL_SERVER`): a small FastAPI service that owns the InsightFace (`buffalo_l`) model and the face embeddings. It exposes `POST /api/detect`, which returns every face in a frame with its position and best match. Only Django calls it.
-- **Client** (`client/REACT_CLIENT`): React 19 + Vite single-page app used by admins and by guards at the posts.
+- **Client** (`client/REACT_CLIENT`): React 19 + Vite single-page app used by admins and by guards at the posts. Its look, components, motion and accessibility rules are documented in [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md). It has light and dark themes and supports Arabic RTL.
 
 ### Roles
 
