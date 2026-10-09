@@ -4,8 +4,6 @@ import os
 from pathlib import Path
 import logging
 import numpy as np
-import time
-import insightface
 from insightface.app import FaceAnalysis
 
 logger = logging.getLogger(__name__)
@@ -21,7 +19,6 @@ class FaceRecognitionService:
         self.model_name = model_name
         self.threshold = threshold
         self.known_faces = {}
-        print('dbpqth : ',db_path)
         
         if not os.path.exists(db_path):
             logger.warning(f"Database path does not exist: {db_path}")
@@ -90,123 +87,3 @@ class FaceRecognitionService:
                 "similarity": best_sim,
             })
         return results
-
-    def recognize_face(self, image_array):
-        """Recognize face in image"""
-        try:
-            logger.info("Starting face recognition...")
-            
-            faces = self.app.get(image_array)
-            
-            if not faces:
-                logger.info("No face match found in database")
-                return {
-                    "success": False,
-                    "message": "No face detected in image"
-                }
-            
-            target_embedding = faces[0].normed_embedding
-            best_match = None
-            best_sim = -1.0
-
-            for person_id, db_embeddings in self.known_faces.items():
-                for db_embedding in db_embeddings:
-                    sim = np.dot(target_embedding, db_embedding)
-                    if sim > best_sim:
-                        best_sim = sim
-                        best_match = person_id
-            
-            if best_match and best_sim >= self.threshold:
-                logger.info(f"Face recognized: {best_match} (confidence: {best_sim:.2f})")
-                return {
-                    "success": True,
-                    "person_id": best_match,
-                    "confidence": float(best_sim),
-                    "distance": float(1.0 - best_sim), 
-                    "message": f"Face recognized as {best_match}"
-                }
-            else:
-                logger.info("No face match found above threshold")
-                return {
-                    "success": False,
-                    "message": "No matching face found in database"
-                }
-                
-        except Exception as e:
-            logger.error(f"Recognition error: {str(e)}")
-            return {
-                "success": False,
-                "message": f"Recognition error: {str(e)}"
-            }
-    
-    def register_face(self, person_id, image_array):
-        try:
-            logger.info(f"Registering face for: {person_id}")
-      
-            faces = self.app.get(image_array)
-            if not faces:
-                logger.warning(f"No face detected in registration image")
-                return {
-                    "success": False,
-                    "message": "No face detected in image. Please provide a clear photo."
-                }
-            
-     
-            person_dir = os.path.join(self.db_path, person_id)
-            os.makedirs(person_dir, exist_ok=True)
-            save_path = os.path.join(person_dir, f"{person_id}_{int(time.time())}.jpg")
-            cv2.imwrite(save_path, image_array)
-
-            self.known_faces.setdefault(person_id, []).append(faces[0].normed_embedding)
-            
-            logger.info(f"Face registered successfully at: {save_path}")
-            
-            return {
-                "success": True,
-                "message": f"Face registered successfully for {person_id}",
-                "path": save_path
-            }
-            
-        except Exception as e:
-            logger.error(f"Registration error: {str(e)}")
-            return {
-                "success": False,
-                "message": f"Registration error: {str(e)}"
-            }
-    
-    def delete_face(self, person_id):
-        try:
-            person_dir = os.path.join(self.db_path, person_id)
-            if os.path.exists(person_dir) and os.path.isdir(person_dir):
-                for f in os.listdir(person_dir):
-                    try:
-                        os.remove(os.path.join(person_dir, f))
-                    except Exception:
-                        pass
-                try:
-                    os.rmdir(person_dir)
-                except Exception:
-                    pass
-            else:
-                file_path = os.path.join(self.db_path, f"{person_id}.jpg")
-                if os.path.exists(file_path):
-                    try:
-                        os.remove(file_path)
-                    except Exception:
-                        pass
-
-            if person_id in self.known_faces:
-                del self.known_faces[person_id]
-                
-            logger.info(f"Deleted face for: {person_id}")
-            return {
-                "success": True,
-                "message": f"Face deleted for {person_id}"
-            }
-                
-        except Exception as e:
-            logger.error(f"Deletion error: {str(e)}")
-            return {
-                "success": False,
-                "message": f"Deletion error: {str(e)}"
-            }

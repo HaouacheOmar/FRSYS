@@ -39,7 +39,7 @@ class DetectEndpointTests(unittest.TestCase):
         cls.patcher = mock.patch.dict(sys.modules, {"insightface": types.ModuleType("insightface"), "insightface.app": stub})
         cls.patcher.start()
         cls.tmp = tempfile.TemporaryDirectory()  # empty face DB; embeddings are injected below
-        with mock.patch.dict("os.environ", {"FACE_DB_PATH": cls.tmp.name, "DJANGO_SERVER_URL": "http://127.0.0.1:9"}):
+        with mock.patch.dict("os.environ", {"FACE_DB_PATH": cls.tmp.name}):
             import app as app_module
         cls.app = app_module
         cls.app.face_service.known_faces = {"A": [unit([0, 1, 0]), unit([1, 0, 0])], "B": [unit([0, 1, 0])]}
@@ -66,6 +66,20 @@ class DetectEndpointTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as ctx:
             self.app.detect_faces(types.SimpleNamespace(file=io.BytesIO(b"not an image")))
         self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_token_required_when_configured(self):
+        from fastapi import HTTPException
+
+        with mock.patch.object(self.app, "MODEL_SERVER_TOKEN", "s3cret"):
+            self.app.require_token("s3cret")  # right token passes
+            with self.assertRaises(HTTPException) as ctx:
+                self.app.require_token("wrong")
+            self.assertEqual(ctx.exception.status_code, 401)
+        self.app.require_token("")  # no token configured: open (local dev)
+
+    def test_only_health_and_detect_are_exposed(self):
+        paths = {route.path for route in self.app.app.routes if not route.path.startswith(("/docs", "/redoc", "/openapi"))}
+        self.assertEqual(paths, {"/health", "/api/detect"})
 
 
 if __name__ == "__main__":

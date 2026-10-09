@@ -42,6 +42,7 @@ def detect(image: np.ndarray) -> list:
         response = _session.post(
             f"{_base_url()}/api/detect",
             files={'file': ('frame.jpg', jpeg.tobytes(), 'image/jpeg')},
+            headers={'X-Model-Token': settings.MODEL_SERVER_TOKEN},
             timeout=DETECT_TIMEOUT_SEC,
         )
         response.raise_for_status()

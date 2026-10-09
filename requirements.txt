@@ -13,7 +13,6 @@ onnxruntime
 opencv-python-headless
 openpyxl
 pandas
-pillow
 psycopg2-binary
 python-dotenv
 python-multipart

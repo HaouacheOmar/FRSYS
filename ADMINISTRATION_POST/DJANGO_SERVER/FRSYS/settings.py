@@ -208,3 +208,5 @@ PHOTOS_BASE_DIR = os.getenv('FACE_DB_PATH', '/data/faces').strip()
 MAX_PHOTOS_ZIP_BYTES = 500 * 1024 * 1024  # uncompressed total
 MAX_PHOTOS_ZIP_ENTRIES = 20000
 MODEL_SERVER_URL = os.getenv('MODEL_SERVER_URL', 'http://localhost:5000').strip()
+# Shared secret sent as X-Model-Token; must match MODEL_SERVER_TOKEN on the model server.
+MODEL_SERVER_TOKEN = os.getenv('MODEL_SERVER_TOKEN', '').strip()
