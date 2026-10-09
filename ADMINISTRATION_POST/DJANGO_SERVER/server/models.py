@@ -1,4 +1,6 @@
 import hashlib
+import re
+from urllib.parse import quote
 
 from django.conf import settings
 from django.db import models, transaction
@@ -69,11 +71,27 @@ class Camera(models.Model):
             if self.is_active:
                 Camera.objects.filter(is_active=True).exclude(pk=self.pk).update(is_active=False)
 
+    def rtsp_url(self, mask=False):
+        """The one place the stream URL is built. Credentials are URL-encoded so a password
+        containing '@' or '/' doesn't break the URL; mask=True hides the password."""
+        user = quote(self.username or '', safe='')
+        pwd = '***' if mask and self.password else quote(self.get_camera_password() or '', safe='')
+        creds = f'{user}:{pwd}@' if user and pwd else (f'{user}@' if user else '')
+        path = self.rtsp_path or '/stream'
+        if not path.startswith('/'):
+            path = '/' + path
+        return f'rtsp://{creds}{self.ip_address}:{self.rtsp_port or 554}{path}'
+
     def set_camera_password(self, raw_password):
         self.password = encrypt_text(raw_password or "")
 
     def get_camera_password(self):
         return decrypt_text(self.password or "")
+
+def mask_url_password(url):
+    """rtsp://user:secret@host -> rtsp://user:***@host, for logs and anything sent to clients."""
+    return re.sub(r'(://[^:/@]*):[^@/]*@', r'\1:***@', url or '')
+
 
 def spectacle_date_errors(date_sortie, date_rentree=None, date_limite_retour=None):
     """Python mirror of Spectacle's CheckConstraints, so bad dates give a 400 instead of an IntegrityError."""

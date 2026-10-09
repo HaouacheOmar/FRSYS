@@ -10,8 +10,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 
 from .services.Stream import VideoStreamProcessor, PROCESS_SCALE, DISPLAY_FPS, IDLE_SLEEP_SEC
-from .views import _build_rtsp_url
-from .models import Camera
+from .models import Camera, mask_url_password
 from .auth_utils import get_user_role
 from .models import UserRole
 from .presence import (
@@ -82,7 +81,7 @@ class VideoStreamConsumer(AsyncWebsocketConsumer):
                 await self.send_json('error', message='no active camera configured')
                 return False
 
-            rtsp_url = _build_rtsp_url(camera)
+            rtsp_url = camera.rtsp_url()
 
             processor = VideoStreamProcessor(
                 rtsp_url=rtsp_url,
@@ -93,16 +92,28 @@ class VideoStreamConsumer(AsyncWebsocketConsumer):
             await asyncio.to_thread(processor.start)
             # Only publish once started, so a failed start doesn't leave a dead processor behind.
             VideoStreamConsumer.stream_processor = processor
-            print(f"VideoStreamProcessor started with source: {rtsp_url} (camera id={camera.id})")
+            print(f"VideoStreamProcessor started with source: {mask_url_password(rtsp_url)} (camera id={camera.id})")
             return True
         except Exception as e:
             print(f"Error starting VideoStreamProcessor: {e}")
             await self.send_json('error', message=f'Failed to start video stream: {str(e)}')
             return False
     
+    @staticmethod
+    def _sync_recognition_mode():
+        """One camera, one processor, many pages: stay in 'return' while any connected page
+        (a Rentrees station) asked for it, so a CheckIns page or a Stop elsewhere can't
+        silently switch return marking off. Returns the effective mode."""
+        wants_return = any(getattr(c, 'mode', 'checkin') == 'return' for c in VideoStreamConsumer.connected_clients)
+        mode = 'return' if wants_return else 'checkin'
+        if VideoStreamConsumer.stream_processor:
+            VideoStreamConsumer.stream_processor.set_recognition_mode(mode)
+        return mode
+
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection."""
         VideoStreamConsumer.connected_clients.discard(self)
+        self._sync_recognition_mode()
 
         # Stop stream processor when last client disconnects (re-checked under the lock:
         # a client may have connected while we waited).
@@ -135,11 +146,14 @@ class VideoStreamConsumer(AsyncWebsocketConsumer):
             }
             
             if message_type in responses:
-                if message_type == 'start' and VideoStreamConsumer.stream_processor:
-                    mode = data.get('mode', 'checkin')
-                    await asyncio.to_thread(VideoStreamConsumer.stream_processor.set_recognition_mode, mode)
-                    await self.send_json('status', message=f"Streaming started ({mode})")
-                    return
+                if message_type in ('start', 'stop'):
+                    # Each page asks for its own mode (Rentrees: 'return', CheckIns: 'checkin');
+                    # the shared processor follows all of them, see _sync_recognition_mode.
+                    self.mode = 'return' if message_type == 'start' and data.get('mode') == 'return' else 'checkin'
+                    mode = self._sync_recognition_mode()
+                    if message_type == 'start' and VideoStreamConsumer.stream_processor:
+                        await self.send_json('status', message=f"Streaming started ({mode})")
+                        return
                 msg_type, message = responses[message_type]
                 await self.send_json(msg_type, **({"message": message} if message else {}))
             

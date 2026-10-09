@@ -10,6 +10,7 @@ except Exception:
     DeepSort = None
 
 from .recongnition import process_frame
+from server.models import mask_url_password
 
 
 RTSP_URL = None
@@ -44,22 +45,6 @@ class VideoStreamProcessor:
         # determine runtime rtsp url:
         # - prefer explicit rtsp_url argument when provided and truthy
         # - otherwise attempt to resolve from Camera DB
-        def _build_from_camera(camera):
-            user = camera.username or ''
-            pwd = camera.get_camera_password() or ''
-            ip = camera.ip_address or ''
-            port = camera.rtsp_port or 554
-            path = camera.rtsp_path or '/stream'
-            if not path.startswith('/'):
-                path = '/' + path
-            if user and pwd:
-                creds = f'{user}:{pwd}@'
-            elif user:
-                creds = f'{user}@'
-            else:
-                creds = ''
-            return f'rtsp://{creds}{ip}:{port}{path}'
-
         def _resolve_rtsp_from_db(camera_id=None):
             try:
                 # import here to avoid circular imports at module load
@@ -70,7 +55,7 @@ class VideoStreamProcessor:
                     cam = Camera.objects.filter(is_active=True).first()
                 if not cam:
                     return ''
-                return _build_from_camera(cam)
+                return cam.rtsp_url()
             except Exception as e:
                 print(f"[Stream] failed to resolve rtsp url from db: {e}")
                 return ''
@@ -329,11 +314,12 @@ class VideoStreamProcessor:
         # self.cap = cv2.VideoCapture(0)
         self.cap = cv2.VideoCapture(self.rtsp_url)
         print("===" * 10)
-        print("rtsp_url = ", self.rtsp_url, " | self.cap = ", self.cap)
+        print("rtsp_url = ", mask_url_password(self.rtsp_url), " | self.cap = ", self.cap)
         print("===" * 10)
         if not self.cap.isOpened():
             self.cap.release()
-            raise RuntimeError(f"Could not open video stream: {self.rtsp_url}")
+            # This message reaches every stream client: never include the password.
+            raise RuntimeError(f"Could not open video stream: {mask_url_password(self.rtsp_url)}")
 
         # Hint OpenCV/FFmpeg to keep stream latency low.
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)

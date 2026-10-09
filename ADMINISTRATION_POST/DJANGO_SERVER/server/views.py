@@ -335,24 +335,6 @@ class CameraViewSet(viewsets.ModelViewSet):
         return Response(results)
 
 
-def _build_rtsp_url(camera):
-    """Build the RTSP URL from Camera model fields."""
-    user = camera.username or ''
-    pwd = camera.get_camera_password() or ''
-    ip = camera.ip_address or ''
-    port = camera.rtsp_port or 554
-    path = camera.rtsp_path or '/stream'
-    if not path.startswith('/'):
-        path = '/' + path
-    if user and pwd:
-        creds = f'{user}:{pwd}@'
-    elif user:
-        creds = f'{user}@'
-    else:
-        creds = ''
-    return f'rtsp://{creds}{ip}:{port}{path}'
-
-
 PROBE_TIMEOUT_SEC = 8
 PROBE_OPENCV_SEC = 5
 PING_ALL_TIMEOUT_SEC = 10
@@ -364,7 +346,8 @@ def _probe_camera(camera):
     If it fails, fall back to ffmpeg.
     """
     import threading
-    rtsp_url = _build_rtsp_url(camera)
+    rtsp_url = camera.rtsp_url()
+    shown_url = camera.rtsp_url(mask=True)  # what the API returns
     result = {'online': False}
 
     def _try_opencv():
@@ -387,19 +370,19 @@ def _probe_camera(camera):
     t.start()
     t.join(timeout=PROBE_OPENCV_SEC)
     if result['online']:
-        return True, rtsp_url
+        return True, shown_url
 
     # Fallback: ffmpeg over TCP, decoding one frame to the null muxer. No temp file, so
     # concurrent probes of the same camera can't collide.
     remaining = deadline - time.monotonic()
     if remaining <= 0:
-        return False, rtsp_url
+        return False, shown_url
     try:
         cmd = ['ffmpeg', '-rtsp_transport', 'tcp', '-i', rtsp_url, '-frames:v', '1', '-f', 'null', '-']
         proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=remaining)
-        return proc.returncode == 0, rtsp_url
+        return proc.returncode == 0, shown_url
     except Exception:
-        return False, rtsp_url
+        return False, shown_url
 
 
 class SpectacleViewSet(viewsets.ModelViewSet):

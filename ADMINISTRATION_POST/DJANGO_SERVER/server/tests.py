@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -230,10 +230,13 @@ class VideoStreamLifecycleTests(TestCase):
         async def fake_init(consumer):
             self.init_calls += 1
             await asyncio.sleep(0.05)  # camera open takes time: the race window
-            self.Consumer.stream_processor = types.SimpleNamespace(
+            processor = types.SimpleNamespace(
                 state_lock=threading.Lock(), rendered_frame=np.zeros((4, 4, 3), np.uint8),
                 rendered_seq=1, latest_boxes=[], latest_error="", stop=lambda: None,
+                recognition_mode="checkin",
             )
+            processor.set_recognition_mode = lambda mode: setattr(processor, "recognition_mode", mode)
+            self.Consumer.stream_processor = processor
             return True
 
         self.patches = [
@@ -299,6 +302,28 @@ class VideoStreamLifecycleTests(TestCase):
 
         sent_while_idle, sent_total = asyncio.run(run())
         self.assertEqual((sent_while_idle, sent_total), (1, 2))
+
+    def test_return_mode_follows_all_pages(self):
+        import asyncio
+        import json
+
+        async def run():
+            rentrees, checkins = self.make(), self.make()
+            await rentrees.connect()
+            await checkins.connect()
+            processor = self.Consumer.stream_processor
+            seen = []
+            await rentrees.receive(json.dumps({"type": "start", "mode": "return"}))
+            seen.append(processor.recognition_mode)
+            await checkins.receive(json.dumps({"type": "start", "mode": "checkin"}))
+            seen.append(processor.recognition_mode)  # CheckIns must not switch returns off
+            await checkins.receive(json.dumps({"type": "stop"}))
+            seen.append(processor.recognition_mode)
+            await rentrees.disconnect(1000)
+            seen.append(processor.recognition_mode)  # last return station left
+            return seen
+
+        self.assertEqual(asyncio.run(run()), ["return", "return", "return", "checkin"])
 
 
 class CameraPingAllTests(TestCase):
@@ -389,3 +414,111 @@ class ProcessFrameTests(TestCase):
         with mock.patch.object(model_client._session, "post", side_effect=requests.ConnectionError("refused")):
             with self.assertRaises(model_client.ModelServerError):
                 recongnition.process_frame(np.zeros((20, 20, 3), np.uint8))
+
+
+class DisabledUserTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user("guest", password="x")
+
+    def refresh_as_user(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        client = APIClient()
+        client.cookies["refresh_token"] = str(RefreshToken.for_user(self.user))
+        return client.post("/api/auth/refresh/")
+
+    def test_active_user_can_refresh(self):
+        self.assertEqual(self.refresh_as_user().status_code, 200)
+
+    def test_disabled_user_cannot_refresh(self):
+        self.user.is_active = False
+        self.user.save()
+        response = self.refresh_as_user()
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.cookies["refresh_token"].value, "")  # cookie cleared
+
+    def test_disabled_user_gets_no_websocket_identity(self):
+        from server.auth_utils import get_user_by_id
+
+        self.assertEqual(get_user_by_id(self.user.id), self.user)
+        self.user.is_active = False
+        self.user.save()
+        self.assertIsNone(get_user_by_id(self.user.id))
+
+
+class CameraPasswordTests(TestCase):
+    def setUp(self):
+        from server.models import Camera
+
+        self.camera = Camera(ip_address="10.0.0.5", model_name="c", username="admin", rtsp_path="cam/1")
+        self.camera.set_camera_password("p@ss/word")
+        self.camera.save()
+
+    def test_full_url_is_encoded_and_masked_url_hides_password(self):
+        self.assertEqual(self.camera.rtsp_url(), "rtsp://admin:p%40ss%2Fword@10.0.0.5:554/cam/1")
+        self.assertEqual(self.camera.rtsp_url(mask=True), "rtsp://admin:***@10.0.0.5:554/cam/1")
+
+    def test_mask_url_password(self):
+        from server.models import mask_url_password
+
+        self.assertEqual(mask_url_password("rtsp://u:secret@h:554/x"), "rtsp://u:***@h:554/x")
+        self.assertEqual(mask_url_password("rtsp://h:554/x"), "rtsp://h:554/x")  # no credentials: unchanged
+
+    def test_camera_api_never_returns_the_password(self):
+        admin = get_user_model().objects.create_user("admin", password="x", is_staff=True)
+        client = APIClient()
+        client.force_authenticate(admin)
+        body = client.get(f"/api/cameras/{self.camera.id}/").content.decode()
+        self.assertNotIn("p%40ss", body)
+        self.assertNotIn("p@ss", body)
+        self.assertIn("admin:***@", body)
+
+
+class EmbeddingNotExposedTests(TestCase):
+    def test_guest_reading_rentrees_gets_no_embedding(self):
+        comp = Compagnie.objects.create(label="A")
+        person = Person.objects.create(mat="M1", nom="N", prenom="P", compagnie=comp, embedding="[0.1, 0.2]")
+        spectacle = Spectacle.objects.create(person=person, date_sortie=timezone.now() - timedelta(hours=1), date_rentree=timezone.now())
+        Rentree.objects.create(person=person, spectacle=spectacle, date_rentree=timezone.now())
+
+        guest = get_user_model().objects.create_user("guest", password="x")
+        client = APIClient()
+        client.force_authenticate(guest)
+        response = client.get("/api/rentrees/")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("embedding", response.content.decode())
+
+
+class WebSocketOriginTests(TransactionTestCase):
+    """A page on another site must not open our sockets with the user's cookie."""
+
+    def connect_from(self, origin):
+        import asyncio
+        import importlib
+
+        from channels.testing import WebsocketCommunicator
+        from django.test import override_settings
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        admin = get_user_model().objects.create_user(f"admin-{origin}", password="x", is_staff=True)
+        token = str(AccessToken.for_user(admin))
+        with override_settings(CORS_ALLOWED_ORIGINS=["http://front.local:3000"]):
+            import FRSYS.routing as routing
+            routing = importlib.reload(routing)
+
+        async def run():
+            communicator = WebsocketCommunicator(
+                routing.application, "/ws/admin/notifications/",
+                headers=[(b"origin", origin.encode()), (b"cookie", f"access_token={token}".encode())],
+            )
+            connected, _ = await communicator.connect()
+            await communicator.disconnect()
+            return connected
+
+        return asyncio.run(run())
+
+    def test_frontend_origin_connects(self):
+        self.assertTrue(self.connect_from("http://front.local:3000"))
+
+    def test_other_site_is_refused(self):
+        self.assertFalse(self.connect_from("http://evil.example"))

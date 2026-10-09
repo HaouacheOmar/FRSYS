@@ -16,7 +16,8 @@ class PersonSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Person
-        fields = ["id", "mat", "nom", "prenom", "path_dir_photo", "compagnie", "compagnie_id", "embedding"]
+        # No "embedding": biometric data, unused by the app, and nested into every Spectacle/Rentree response.
+        fields = ["id", "mat", "nom", "prenom", "path_dir_photo", "compagnie", "compagnie_id"]
 
 # serializer for camera data
 class CameraSerializer(serializers.ModelSerializer):
@@ -28,20 +29,7 @@ class CameraSerializer(serializers.ModelSerializer):
         return bool(obj.password)
 
     def get_rtsp_url(self, obj):
-        user = obj.username or ''
-        pwd = obj.get_camera_password() or ''
-        ip = obj.ip_address or ''
-        port = obj.rtsp_port or 554
-        path = obj.rtsp_path or '/stream'
-        if not path.startswith('/'):
-            path = '/' + path
-        if user and pwd:
-            creds = f'{user}:{pwd}@'
-        elif user:
-            creds = f'{user}@'
-        else:
-            creds = ''
-        return f'rtsp://{creds}{ip}:{port}{path}'
+        return obj.rtsp_url(mask=True)  # never send the camera password to clients
 
     def create(self, validated_data):
         raw_password = validated_data.pop('password', None)

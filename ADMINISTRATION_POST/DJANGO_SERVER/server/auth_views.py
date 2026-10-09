@@ -164,6 +164,17 @@ class RefreshTokenView(_CookieTokenMixin, APIView):
         except TokenError:
             return Response({"detail": "Invalid refresh token."}, status=status.HTTP_401_UNAUTHORIZED)
 
+        # A deleted or disabled account must not get new tokens (refresh tokens live 7 days).
+        user = get_user_model().objects.filter(id=old_refresh.get("user_id"), is_active=True).first()
+        if not user:
+            try:
+                old_refresh.blacklist()
+            except Exception:
+                pass
+            response = Response({"detail": "Account not found or disabled."}, status=status.HTTP_401_UNAUTHORIZED)
+            self._clear_cookies(response)
+            return response
+
         response = Response({"detail": "Token refreshed."}, status=status.HTTP_200_OK)
         self._set_access_cookie(response, old_refresh.access_token)
 
@@ -172,12 +183,6 @@ class RefreshTokenView(_CookieTokenMixin, APIView):
                 old_refresh.blacklist()
             except Exception:
                 pass
-            user_id = old_refresh.get("user_id")
-            user = get_user_model().objects.filter(id=user_id).first()
-            if not user:
-                self._clear_cookies(response)
-                return Response({"detail": "User not found."}, status=status.HTTP_401_UNAUTHORIZED)
-
             new_refresh = RefreshToken.for_user(user)
             self._set_refresh_cookie(response, new_refresh)
 

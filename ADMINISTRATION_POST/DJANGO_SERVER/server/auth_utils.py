@@ -38,8 +38,6 @@ def set_user_role(user, role):
 
 
 def get_user_by_id(user_id):
-    User = get_user_model()
-    try:
-        return User.objects.get(id=user_id)
-    except User.DoesNotExist:
-        return None
+    """Active user or None. WebSocket auth relies on this, so a disabled account loses
+    stream/presence access as soon as its access token is checked again."""
+    return get_user_model().objects.filter(id=user_id, is_active=True).first()
