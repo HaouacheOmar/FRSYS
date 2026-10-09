@@ -1,5 +1,3 @@
-import daphne
-
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import cv2
@@ -33,7 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DEFAULT_DB_PATH = os.environ.get("FACE_DB_PATH", r"C:\Users\youne\OneDrive\Desktop\test_photos")
+DEFAULT_DB_PATH = os.environ.get("FACE_DB_PATH", "/data/faces")  # same default as Django's PHOTOS_BASE_DIR
 
 def resolve_db_path():
     django_url = os.environ.get("DJANGO_SERVER_URL", "http://localhost:8000").rstrip("/")
@@ -80,6 +78,18 @@ async def health_check():
         "model": "InsightFace (buffalo_l)", # Updated label
         "db_path": DB_PATH
     }
+
+@app.post("/api/detect")
+def detect_faces(file: UploadFile = File(...)):
+    """All faces in a frame with boxes and matches (Django's live stream calls this).
+
+    Plain `def`: FastAPI runs it in a worker thread, so the model doesn't block the event loop.
+    """
+    image = cv2.imdecode(np.frombuffer(file.file.read(), np.uint8), cv2.IMREAD_COLOR)
+    if image is None:
+        raise HTTPException(status_code=400, detail="Invalid image")
+    return {"faces": face_service.detect_and_match(image)}
+
 
 @app.post("/api/recognize")
 async def recognize_face(file: UploadFile = File(...)):
@@ -166,15 +176,6 @@ async def register_face(person_id: str, file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    import daphne
-    
-    logger.info("Starting Face Recognition Model Server...")
-    logger.info(f"Database path: {DB_PATH}")
-    
-    
-    daphne.run(
-        app,
-        host="0.0.0.0",  
-        port=5000,
-        log_level="info"
-    )
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=5000, log_level="info")

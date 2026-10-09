@@ -71,6 +71,26 @@ class FaceRecognitionService:
         total_images = sum(len(v) for v in self.known_faces.values())
         logger.info(f"Loaded {len(self.known_faces)} identities and {total_images} images into memory.")
 
+    def detect_and_match(self, image_array):
+        """Every face in the image: its box and the best-matching identity above threshold.
+
+        Returns [{"bbox": [x1, y1, x2, y2], "person_id": str | None, "similarity": float}].
+        Used by Django's live stream, which needs all faces with positions, not just the first.
+        """
+        results = []
+        for face in self.app.get(image_array):
+            best_match, best_sim = None, -1.0
+            for person_id, db_embeddings in self.known_faces.items():
+                sim = max(float(np.dot(face.normed_embedding, e)) for e in db_embeddings)
+                if sim > best_sim:
+                    best_match, best_sim = person_id, sim
+            results.append({
+                "bbox": [int(v) for v in face.bbox],
+                "person_id": best_match if best_sim >= self.threshold else None,
+                "similarity": best_sim,
+            })
+        return results
+
     def recognize_face(self, image_array):
         """Recognize face in image"""
         try:
