@@ -38,6 +38,9 @@ class VideoStreamConsumer(AsyncWebsocketConsumer):
     streaming_task = None
     connected_clients = set()
     frame_counter = 0
+    # Serializes processor start/stop: without it two simultaneous connects each build a
+    # processor (one leaks), and a refresh (disconnect + connect) can end with no stream.
+    lifecycle_lock = asyncio.Lock()
     
     @staticmethod
     def create_json_response(msg_type, **kwargs):
@@ -53,14 +56,20 @@ class VideoStreamConsumer(AsyncWebsocketConsumer):
             return
 
         await self.accept()
+        # Register before taking the lock, so a concurrent last-client disconnect sees us
+        # and skips its cleanup.
         VideoStreamConsumer.connected_clients.add(self)
-        
-        if not VideoStreamConsumer.stream_processor:
-            if not await self._initialize_stream_processor():
-                return
-        
-        if not VideoStreamConsumer.streaming_task or VideoStreamConsumer.streaming_task.done():
-            VideoStreamConsumer.streaming_task = asyncio.create_task(self.stream_video())
+
+        async with VideoStreamConsumer.lifecycle_lock:
+            if not VideoStreamConsumer.stream_processor:
+                if not await self._initialize_stream_processor():
+                    # Don't linger as a client with no stream; that blocks cleanup for everyone.
+                    VideoStreamConsumer.connected_clients.discard(self)
+                    await self.close(code=4500)
+                    return
+
+            if not VideoStreamConsumer.streaming_task or VideoStreamConsumer.streaming_task.done():
+                VideoStreamConsumer.streaming_task = asyncio.create_task(self.stream_video())
         
         await self.send_json('connection', message='Connected to video stream')
     
@@ -75,13 +84,15 @@ class VideoStreamConsumer(AsyncWebsocketConsumer):
 
             rtsp_url = _build_rtsp_url(camera)
 
-            VideoStreamConsumer.stream_processor = VideoStreamProcessor(
+            processor = VideoStreamProcessor(
                 rtsp_url=rtsp_url,
                 process_scale=PROCESS_SCALE,
                 display_fps=DISPLAY_FPS,
                 idle_sleep_sec=IDLE_SLEEP_SEC
             )
-            await asyncio.to_thread(VideoStreamConsumer.stream_processor.start)
+            await asyncio.to_thread(processor.start)
+            # Only publish once started, so a failed start doesn't leave a dead processor behind.
+            VideoStreamConsumer.stream_processor = processor
             print(f"VideoStreamProcessor started with source: {rtsp_url} (camera id={camera.id})")
             return True
         except Exception as e:
@@ -92,10 +103,12 @@ class VideoStreamConsumer(AsyncWebsocketConsumer):
     async def disconnect(self, close_code):
         """Handle WebSocket disconnection."""
         VideoStreamConsumer.connected_clients.discard(self)
-        
-        # Stop stream processor when last client disconnects
-        if not VideoStreamConsumer.connected_clients:
-            await self._cleanup_stream_processor()
+
+        # Stop stream processor when last client disconnects (re-checked under the lock:
+        # a client may have connected while we waited).
+        async with VideoStreamConsumer.lifecycle_lock:
+            if not VideoStreamConsumer.connected_clients:
+                await self._cleanup_stream_processor()
     
     async def _cleanup_stream_processor(self):
         """Stop and cleanup the stream processor."""
@@ -135,20 +148,20 @@ class VideoStreamConsumer(AsyncWebsocketConsumer):
     
     async def stream_video(self):
         """Main streaming loop - retrieves and broadcasts processed frames."""
+        last_seq = -1
         try:
             while VideoStreamConsumer.connected_clients:
-                # Get rendered frame from processor
-                frame_data = await self._get_frame_from_processor()
+                # Only new renders: re-sending the same frame wasted CPU on the event loop.
+                frame_data = await self._get_frame_from_processor(last_seq)
                 if not frame_data:
-                    await asyncio.sleep(0.01)
+                    await asyncio.sleep(1 / DISPLAY_FPS)
                     continue
-                
-                rendered_frame, boxes, error = frame_data
+
+                rendered_frame, boxes, error, last_seq = frame_data
                 VideoStreamConsumer.frame_counter += 1
 
                 # Skip frames to reduce bandwidth
                 if VideoStreamConsumer.frame_counter % self.SEND_EVERY_N_FRAMES != 0:
-                    await asyncio.sleep(0.001)
                     continue
                 
                 # Encode and broadcast frame
@@ -160,31 +173,28 @@ class VideoStreamConsumer(AsyncWebsocketConsumer):
             print(f"Streaming error: {str(e)}")
             await self.broadcast_to_all({'type': 'error', 'message': f'Streaming error: {str(e)}'})
     
-    async def _get_frame_from_processor(self):
-        """Get the current rendered frame from the processor. Returns (frame, boxes, error) or None."""
+    async def _get_frame_from_processor(self, last_seq):
+        """Newest rendered frame if it is newer than last_seq: (frame, boxes, error, seq), else None."""
         processor = VideoStreamConsumer.stream_processor
         if not processor:
             await asyncio.sleep(0.1)
             return None
-        
+
         with processor.state_lock:
-            if processor.rendered_frame is None:
+            if processor.rendered_frame is None or processor.rendered_seq == last_seq:
                 return None
             return (
                 processor.rendered_frame.copy(),
                 list(processor.latest_boxes),
-                processor.latest_error
+                processor.latest_error,
+                processor.rendered_seq,
             )
     
     async def _encode_and_broadcast(self, rendered_frame, boxes, error):
         """Encode frame as JPEG and broadcast to all clients."""
         try:
-            # Resize if needed to reduce transfer size
-            transfer_frame = self._resize_frame_if_needed(rendered_frame)
-            
-            # Encode as JPEG
-            _, buffer = cv2.imencode('.jpg', transfer_frame, [cv2.IMWRITE_JPEG_QUALITY, self.JPEG_QUALITY])
-            frame_base64 = base64.b64encode(buffer).decode('utf-8')
+            # Resize + JPEG + base64 is CPU work: keep it off the event loop.
+            frame_base64 = await asyncio.to_thread(self._encode_frame, rendered_frame)
             
             # Extract person details for frontend display (without IDs)
             detections = await self._format_detections(boxes)
@@ -204,6 +214,11 @@ class VideoStreamConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             await self.broadcast_to_all({'type': 'error', 'message': f'Processing error: {str(e)}'})
     
+    def _encode_frame(self, rendered_frame):
+        transfer_frame = self._resize_frame_if_needed(rendered_frame)
+        _, buffer = cv2.imencode('.jpg', transfer_frame, [cv2.IMWRITE_JPEG_QUALITY, self.JPEG_QUALITY])
+        return base64.b64encode(buffer).decode('utf-8')
+
     def _resize_frame_if_needed(self, frame):
         """Resize frame if it exceeds MAX_TRANSFER_WIDTH."""
         h, w = frame.shape[:2]

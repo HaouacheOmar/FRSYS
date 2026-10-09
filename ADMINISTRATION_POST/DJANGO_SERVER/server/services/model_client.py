@@ -1,177 +1,50 @@
-import requests
+"""HTTP client for MODEL_SERVER, which owns the InsightFace model and the face embeddings."""
+import logging
+
 import cv2
 import numpy as np
-from typing import Dict, Optional
-import logging
+import requests
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-class ModelServerClient:
-    """comm client -> model"""
-    
-    def __init__(self, model_server_url: str = None):
-        """
-        init Model Server client
-        
-        params:
-            model_server_url: URL of the model server (default from settings)
-        """
-        self.base_url = (model_server_url or 
-                        getattr(settings, 'MODEL_SERVER_URL', 'http://localhost:5000')).rstrip('/')
-        logger.info(f"Model Server Client initialized: {self.base_url}")
-        
-    def health_check(self) -> bool:
-        """
-        Check if model server is available
-        
-        Returns:
-            True if server is healthy, False otherwise
-        """
-        try:
-            response = requests.get(f"{self.base_url}/health", timeout=5)
-            if response.status_code == 200:
-                logger.info("Model server health check: OK")
-                return True
-            else:
-                logger.warning(f"Model server health check failed: {response.status_code}")
-                return False
-        except Exception as e:
-            logger.error(f"Model server health check failed: {e}")
-            return False
-    
-    def recognize_face(self, image: np.ndarray) -> Dict:
-        """
-        Send image to model server for recognition
-        
-        params:
-            image: numpy array (BGR format from OpenCV)
-            
-        Returns:
-            {
-                "success": bool,
-                "person_id": str (if found),
-                "confidence": float (if found),
-                "message": str
-            }
-        """
-        try:
-            # Convert image to bytes
-            _, img_encoded = cv2.imencode('.jpg', image)
-            
-            # Send to model server
-            files = {'file': ('image.jpg', img_encoded.tobytes(), 'image/jpeg')}
-            response = requests.post(
-                f"{self.base_url}/api/recognize",
-                files=files,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if result.get('success'):
-                    logger.info(f"Face recognized: {result.get('person_id')}")
-                return result
-            else:
-                logger.error(f"Model server error: {response.status_code}")
-                return {
-                    "success": False,
-                    "message": f"Model server error: {response.status_code}"
-                }
-                
-        except Exception as e:
-            logger.error(f"Face recognition request failed: {e}")
-            return {
-                "success": False,
-                "message": f"Request failed: {str(e)}"
-            }
-    
-    def register_face(self, person_id: str, image: np.ndarray) -> Dict:
-        """
-        Register a new face in the model database
-        
-        params:
-            person_id: Unique identifier for the person
-            image: numpy array (BGR format from OpenCV)
-            
-        Returns:
-            {
-                "success": bool,
-                "message": str,
-                "path": str (if successful)
-            }
-        """
-        try:
-            # Convert image to bytes
-            _, img_encoded = cv2.imencode('.jpg', image)
-            
-            files = {'file': ('image.jpg', img_encoded.tobytes(), 'image/jpeg')}
-            params = {'person_id': person_id}
-            
-            response = requests.post(
-                f"{self.base_url}/api/register",
-                files=files,
-                params=params,
-                timeout=30
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if result.get('success'):
-                    logger.info(f"Face registered: {person_id}")
-                return result
-            else:
-                logger.error(f"Registration failed: {response.status_code}")
-                return {
-                    "success": False,
-                    "message": f"Registration failed: {response.status_code}"
-                }
-                
-        except Exception as e:
-            logger.error(f"Face registration failed: {e}")
-            return {
-                "success": False,
-                "message": f"Request failed: {str(e)}"
-            }
-    
-    def recognize_batch(self, images: list) -> Dict:
-        """
-        Recognize multiple faces in batch
-        
-        params:
-            images: List of numpy arrays (BGR format)
-            
-        Returns:
-            {
-                "results": [...],
-                "total": int
-            }
-        """
-        try:
-            files = []
-            for i, image in enumerate(images):
-                _, img_encoded = cv2.imencode('.jpg', image)
-                files.append(
-                    ('files', (f'image_{i}.jpg', img_encoded.tobytes(), 'image/jpeg'))
-                )
-            
-            response = requests.post(
-                f"{self.base_url}/api/recognize/batch",
-                files=files,
-                timeout=60
-            )
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                return {
-                    "success": False,
-                    "message": f"Batch recognition failed: {response.status_code}"
-                }
-                
-        except Exception as e:
-            logger.error(f"Batch recognition failed: {e}")
-            return {
-                "success": False,
-                "message": f"Request failed: {str(e)}"
-            }
+# One kept-alive connection: the stream calls detect() for every processed frame.
+_session = requests.Session()
+DETECT_TIMEOUT_SEC = 5
+
+
+class ModelServerError(RuntimeError):
+    pass
+
+
+def _base_url():
+    return settings.MODEL_SERVER_URL.rstrip('/')
+
+
+def health_check() -> bool:
+    try:
+        return _session.get(f"{_base_url()}/health", timeout=5).status_code == 200
+    except requests.RequestException as e:
+        logger.warning(f"Model server health check failed: {e}")
+        return False
+
+
+def detect(image: np.ndarray) -> list:
+    """All faces in a BGR frame: [{"bbox": [x1, y1, x2, y2], "person_id": str | None, "similarity": float}].
+
+    Raises ModelServerError when the model server is down or answers with an error, so the
+    stream can show it instead of silently reporting "no faces".
+    """
+    ok, jpeg = cv2.imencode('.jpg', image)
+    if not ok:
+        raise ModelServerError("Could not encode frame")
+    try:
+        response = _session.post(
+            f"{_base_url()}/api/detect",
+            files={'file': ('frame.jpg', jpeg.tobytes(), 'image/jpeg')},
+            timeout=DETECT_TIMEOUT_SEC,
+        )
+        response.raise_for_status()
+        return response.json()['faces']
+    except (requests.RequestException, ValueError, KeyError) as e:
+        raise ModelServerError(f"Model server unavailable: {e}") from e

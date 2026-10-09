@@ -1,7 +1,7 @@
 import hashlib
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
@@ -61,11 +61,29 @@ class Camera(models.Model):
     def __str__(self):
         return f"{self.model_name} - {self.ip_address}"
 
+    def save(self, *args, **kwargs):
+        # The stream reads a single camera (first is_active), so keep at most one active:
+        # activating/creating/editing one as active switches the others off.
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            if self.is_active:
+                Camera.objects.filter(is_active=True).exclude(pk=self.pk).update(is_active=False)
+
     def set_camera_password(self, raw_password):
         self.password = encrypt_text(raw_password or "")
 
     def get_camera_password(self):
         return decrypt_text(self.password or "")
+
+def spectacle_date_errors(date_sortie, date_rentree=None, date_limite_retour=None):
+    """Python mirror of Spectacle's CheckConstraints, so bad dates give a 400 instead of an IntegrityError."""
+    errors = {}
+    if date_sortie and date_rentree and date_rentree < date_sortie:
+        errors["date_rentree"] = "date_rentree must not be before date_sortie."
+    if date_sortie and date_limite_retour and date_limite_retour < date_sortie:
+        errors["date_limite_retour"] = "date_limite_retour must not be before date_sortie."
+    return errors
+
 
 # outing record table
 class Spectacle(models.Model):

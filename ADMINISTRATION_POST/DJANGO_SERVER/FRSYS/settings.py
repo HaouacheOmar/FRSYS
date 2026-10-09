@@ -124,7 +124,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Africa/Algiers'
 
 USE_TZ = True
 
@@ -199,3 +199,4 @@ REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {
     'auth_guest_manage': os.getenv('THROTTLE_AUTH_GUEST_MANAGE', '200/hour').strip(),
 }
 PHOTOS_BASE_DIR='/data/faces'
+MODEL_SERVER_URL = os.getenv('MODEL_SERVER_URL', 'http://localhost:5000').strip()

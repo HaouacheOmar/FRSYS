@@ -12,7 +12,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 import os
 import mimetypes
 import pandas as pd
-from .models import Person, Compagnie, Camera, Spectacle, Rentree
+from .models import Person, Compagnie, Camera, Spectacle, Rentree, spectacle_date_errors
 from .serializers import (
     PersonSerializer, 
     CompagnieSerializer, 
@@ -30,7 +30,7 @@ from rest_framework import status
 from rest_framework.response import Response
 import urllib.parse
 import subprocess
-import tempfile
+import time
 import os
 
 
@@ -320,30 +320,17 @@ class CameraViewSet(viewsets.ModelViewSet):
             online, rtsp_url = _probe_camera(cam)
             return cam.id, online, rtsp_url
 
-        # Use ThreadPoolExecutor but handle concurrent.futures.TimeoutError so
-        # a slow probe doesn't cause the entire request to fail. Mark unfinished
-        # probes as offline and return partial results.
-        with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(cameras), 20) or 1) as pool:
-            futures = {pool.submit(_job, cam): cam.id for cam in cameras}
-            try:
-                for future in concurrent.futures.as_completed(futures, timeout=10):
-                    try:
-                        cam_id, online, rtsp_url = future.result()
-                        results[cam_id] = {'online': online, 'rtsp_url': rtsp_url}
-                    except Exception:
-                        cam_id = futures.get(future)
-                        results[cam_id] = {'online': False, 'rtsp_url': ''}
-            except concurrent.futures.TimeoutError:
-                # Some futures didn't finish within timeout: gather finished ones
-                for future, cam_id in futures.items():
-                    if future.done():
-                        try:
-                            _, online, rtsp_url = future.result()
-                            results[cam_id] = {'online': online, 'rtsp_url': rtsp_url}
-                        except Exception:
-                            results[cam_id] = {'online': False, 'rtsp_url': ''}
-                    else:
-                        results[cam_id] = {'online': False, 'rtsp_url': ''}
+        # No `with` block: its exit waits for every probe, which made the timeout useless.
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=min(len(cameras), 20) or 1)
+        futures = {pool.submit(_job, cam): cam.id for cam in cameras}
+        concurrent.futures.wait(futures, timeout=PING_ALL_TIMEOUT_SEC)
+        pool.shutdown(wait=False, cancel_futures=True)
+
+        for future, cam_id in futures.items():
+            results[cam_id] = {'online': False, 'rtsp_url': ''}  # unfinished or failed = offline
+            if future.done() and not future.cancelled() and future.exception() is None:
+                _, online, rtsp_url = future.result()
+                results[cam_id] = {'online': online, 'rtsp_url': rtsp_url}
 
         return Response(results)
 
@@ -364,6 +351,11 @@ def _build_rtsp_url(camera):
     else:
         creds = ''
     return f'rtsp://{creds}{ip}:{port}{path}'
+
+
+PROBE_TIMEOUT_SEC = 8
+PROBE_OPENCV_SEC = 5
+PING_ALL_TIMEOUT_SEC = 10
 
 
 def _probe_camera(camera):
@@ -389,26 +381,23 @@ def _probe_camera(camera):
         except Exception:
             result['online'] = False
 
-    # First try OpenCV with timeout
+    # One time budget per camera (OpenCV first, ffmpeg gets the rest); it was 6s + 8s before.
+    deadline = time.monotonic() + PROBE_TIMEOUT_SEC
     t = threading.Thread(target=_try_opencv, daemon=True)
     t.start()
-    t.join(timeout=6)
+    t.join(timeout=PROBE_OPENCV_SEC)
     if result['online']:
         return True, rtsp_url
 
-    # Fallback: try calling ffmpeg to grab one frame
+    # Fallback: ffmpeg over TCP, decoding one frame to the null muxer. No temp file, so
+    # concurrent probes of the same camera can't collide.
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return False, rtsp_url
     try:
-        tmpdir = tempfile.gettempdir()
-        out_path = os.path.join(tmpdir, f"probe_{camera.id}_{int(os.getpid())}.jpg")
-        cmd = [
-            'ffmpeg', '-rtsp_transport', 'tcp',
-            '-i', rtsp_url, '-t', '2', '-frames:v', '1', '-y', out_path
-        ]
-        proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=8)
-        ok = proc.returncode == 0 and os.path.exists(out_path) and os.path.getsize(out_path) > 0
-        if os.path.exists(out_path):
-            os.remove(out_path)
-        return bool(ok), rtsp_url
+        cmd = ['ffmpeg', '-rtsp_transport', 'tcp', '-i', rtsp_url, '-frames:v', '1', '-f', 'null', '-']
+        proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=remaining)
+        return proc.returncode == 0, rtsp_url
     except Exception:
         return False, rtsp_url
 
@@ -440,10 +429,18 @@ class SpectacleViewSet(viewsets.ModelViewSet):
         return df
 
     def _parse_datetime_value(self, value):
-        if pd.isna(value) or value == "":
+        # Anything but a scalar string (e.g. a JSON list/object) would make pd.isna ambiguous -> 500.
+        if not isinstance(value, str):
+            return None
+        value = value.strip()
+        if not value or value.lower() == "nan":
             return None
 
-        parsed = pd.to_datetime(value, errors="coerce")
+        # ISO first (API clients, Excel date cells read as text). Only then day-first, for
+        # French-style "05/03/2026". dayfirst=True alone would also flip ISO "2026-03-05" to May 3.
+        parsed = pd.to_datetime(value, format="ISO8601", errors="coerce")
+        if pd.isna(parsed):
+            parsed = pd.to_datetime(value, dayfirst=True, errors="coerce")
         if pd.isna(parsed):
             return None
 
@@ -463,7 +460,8 @@ class SpectacleViewSet(viewsets.ModelViewSet):
             return super().create(request, *args, **kwargs)
 
         try:
-            df = pd.read_excel(excel_file)
+            # Read as text: inferred dtypes turn mats like 00123 into 123 (or 1234.0 next to blanks).
+            df = pd.read_excel(excel_file, dtype=str)
         except Exception as exc:
             return Response(
                 {"detail": f"Invalid Excel file: {exc}"},
@@ -530,6 +528,11 @@ class SpectacleViewSet(viewsets.ModelViewSet):
             date_rentree = self._parse_datetime_value(row.get("date_rentree"))
             date_limite_retour = self._parse_datetime_value(row.get("date_limite_retour"))
 
+            date_errors = spectacle_date_errors(date_sortie, date_rentree, date_limite_retour)
+            if date_errors:
+                errors.extend(f"Row {line_no}: {msg}" for msg in date_errors.values())
+                continue
+
             to_create.append(
                 Spectacle(
                     person=person,
@@ -548,6 +551,17 @@ class SpectacleViewSet(viewsets.ModelViewSet):
 
         with transaction.atomic():
             created = Spectacle.objects.bulk_create(to_create)
+            # Rows imported as already returned need their Rentree too, or they're missing from
+            # the returns list and late_returns.
+            Rentree.objects.bulk_create([
+                Rentree(
+                    person=s.person,
+                    spectacle=s,
+                    date_rentree=s.date_rentree,
+                    est_retard=bool(s.date_limite_retour and s.date_rentree > s.date_limite_retour),
+                )
+                for s in created if s.date_rentree
+            ])
 
         created_ids = [obj.id for obj in created if obj.id is not None]
         created_qs = self.get_queryset().filter(id__in=created_ids)
@@ -640,6 +654,10 @@ class SpectacleViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        date_errors = spectacle_date_errors(spectacle.date_sortie, date_rentree)
+        if date_errors:
+            return Response({'detail': date_errors['date_rentree']}, status=status.HTTP_400_BAD_REQUEST)
+
         est_retard = bool(
             spectacle.date_limite_retour and date_rentree > spectacle.date_limite_retour
         )
@@ -689,10 +707,15 @@ class RentreeViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Optimize queryset - eager load all nested relations."""
-        return super().get_queryset().select_related(
+        queryset = super().get_queryset().select_related(
             'person__compagnie',
             'spectacle__person__compagnie'
         )
+        # ?compagnie={id} - Filter by the person's company (used by the Rentrees page)
+        compagnie = self.request.query_params.get('compagnie', '')
+        if compagnie.isdigit():
+            queryset = queryset.filter(person__compagnie_id=int(compagnie))
+        return queryset
 
     @action(detail=False, methods=['get'])
     def late_returns(self, request):
@@ -713,9 +736,19 @@ class RentreeViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         """Update rentree and keep spectacle return date in sync."""
+        old_spectacle_id = serializer.instance.spectacle_id
         with transaction.atomic():
             rentree = serializer.save()
             spectacle = rentree.spectacle
             if spectacle.date_rentree != rentree.date_rentree:
                 spectacle.date_rentree = rentree.date_rentree
                 spectacle.save(update_fields=['date_rentree'])
+            # Moved to another spectacle: the old one is no longer returned.
+            if old_spectacle_id != spectacle.id:
+                Spectacle.objects.filter(id=old_spectacle_id).update(date_rentree=None)
+
+    def perform_destroy(self, instance):
+        """Deleting a return reopens its spectacle, so it shows as pending again."""
+        with transaction.atomic():
+            Spectacle.objects.filter(id=instance.spectacle_id).update(date_rentree=None)
+            instance.delete()

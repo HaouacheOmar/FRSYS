@@ -1,5 +1,6 @@
 import cv2
 import queue
+from django.db import connection
 import threading
 import time
 
@@ -17,6 +18,8 @@ IDLE_SLEEP_SEC = 0.005
 DISPLAY_FPS = 30
 PROCESS_EVERY_N_FRAMES = 5
 USE_DEEPSORT = True
+RECONNECT_MIN_SEC = 1.0
+RECONNECT_MAX_SEC = 10.0
 
 
 class VideoStreamProcessor:
@@ -97,6 +100,7 @@ class VideoStreamProcessor:
         self.latest_error = ""
         self.latest_frame = None
         self.rendered_frame = None
+        self.rendered_seq = 0  # bumped on every render so consumers send only new frames
         self.recognition_mode = "checkin"
         self.capture_frame_index = 0
 
@@ -146,7 +150,11 @@ class VideoStreamProcessor:
                     self.latest_error = ""
             except Exception as err:
                 with self.state_lock:
+                    self.latest_boxes = []  # don't keep drawing boxes from before the failure
                     self.latest_error = str(err)
+
+        # This thread owns its own Django DB connection; don't leak it per processor restart.
+        connection.close()
 
     def set_recognition_mode(self, mode):
         """Update recognition mode used by worker thread."""
@@ -217,13 +225,25 @@ class VideoStreamProcessor:
     
     def capture_worker(self):
         """Worker thread for capturing frames from the video stream."""
+        backoff = RECONNECT_MIN_SEC
         while not self.stop_event.is_set():
             ret, frame = self.cap.read()
             if not ret:
+                # Transient RTSP drop: reopen with backoff instead of dying for good.
                 with self.state_lock:
-                    self.latest_error = "Failed to grab frame"
-                self.stop_event.set()
-                break
+                    self.latest_error = f"Camera stream lost, reconnecting in {backoff:.0f}s..."
+                self.cap.release()
+                if self.stop_event.wait(backoff):
+                    break
+                self.cap = cv2.VideoCapture(self.rtsp_url)
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                backoff = min(backoff * 2, RECONNECT_MAX_SEC)
+                continue
+
+            if backoff != RECONNECT_MIN_SEC:
+                backoff = RECONNECT_MIN_SEC
+                with self.state_lock:
+                    self.latest_error = ""
 
             self.capture_frame_index += 1
 
@@ -232,7 +252,7 @@ class VideoStreamProcessor:
 
             self.new_frame_event.set()
 
-            # Process every Nth frame only to reduce DeepFace load.
+            # Process every Nth frame only, to limit model server load.
             if self.capture_frame_index % self.process_every_n_frames != 0:
                 continue
 
@@ -247,7 +267,10 @@ class VideoStreamProcessor:
                 scale_y = 1.0
 
             self.enqueue_latest_processing_frame((proc_frame, scale_x, scale_y))
-    
+
+        # A reopen may have raced with stop(); release whatever capture we hold now.
+        self.cap.release()
+
     def draw_worker(self):
         """Worker thread for rendering frames with bounding boxes and labels."""
         while not self.stop_event.is_set():
@@ -285,7 +308,7 @@ class VideoStreamProcessor:
             if draw_error:
                 cv2.putText(
                     frame_src,
-                    f"DeepFace error: {draw_error}",
+                    f"Recognition error: {draw_error}",
                     (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.6,
@@ -295,6 +318,7 @@ class VideoStreamProcessor:
 
             with self.state_lock:
                 self.rendered_frame = frame_src
+                self.rendered_seq += 1
 
             if not has_new_frame:
                 time.sleep(self.idle_sleep_sec)
@@ -308,8 +332,8 @@ class VideoStreamProcessor:
         print("rtsp_url = ", self.rtsp_url, " | self.cap = ", self.cap)
         print("===" * 10)
         if not self.cap.isOpened():
-            print("Error: Could not open video stream")
-            raise SystemExit(1)
+            self.cap.release()
+            raise RuntimeError(f"Could not open video stream: {self.rtsp_url}")
 
         # Hint OpenCV/FFmpeg to keep stream latency low.
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)

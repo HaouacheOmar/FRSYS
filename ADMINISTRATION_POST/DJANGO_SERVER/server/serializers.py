@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Person, Compagnie, Camera, Spectacle, Rentree
+from .models import Person, Compagnie, Camera, Spectacle, Rentree, spectacle_date_errors
 
 # serializer for company data
 class CompagnieSerializer(serializers.ModelSerializer):
@@ -73,6 +73,16 @@ class SpectacleSerializer(serializers.ModelSerializer):
     # accept person id when creating or updating
     person_id = serializers.PrimaryKeyRelatedField(queryset=Person.objects.all(), source='person', write_only=True)
 
+    def validate(self, attrs):
+        # On PATCH, fields not sent keep their stored value.
+        def current(field):
+            return attrs.get(field, getattr(self.instance, field, None))
+
+        errors = spectacle_date_errors(current('date_sortie'), current('date_rentree'), current('date_limite_retour'))
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
+
     class Meta:
         model = Spectacle
         fields = ["id", "person", "person_id", "title", "date_sortie", "date_rentree", "date_limite_retour"]
@@ -87,19 +97,25 @@ class RentreeSerializer(serializers.ModelSerializer):
     spectacle_id = serializers.PrimaryKeyRelatedField(queryset=Spectacle.objects.all(), source='spectacle', write_only=True)
 
     def validate(self, attrs):
-        spectacle = attrs.get('spectacle')
+        # On PATCH, fields not sent keep their stored value (otherwise est_retard gets reset).
+        spectacle = attrs.get('spectacle', getattr(self.instance, 'spectacle', None))
         provided_person = attrs.get('person')
-        date_rentree = attrs.get('date_rentree')
+        date_rentree = attrs.get('date_rentree', getattr(self.instance, 'date_rentree', None))
 
         if spectacle and provided_person and spectacle.person_id != provided_person.id:
             raise serializers.ValidationError({
                 'person_id': 'person_id must match spectacle.person.'
             })
 
-        if date_rentree and spectacle and spectacle.date_sortie and date_rentree < spectacle.date_sortie:
+        # spectacle is a OneToOne: a second return for it would be an IntegrityError (500).
+        if spectacle and Rentree.objects.filter(spectacle=spectacle).exclude(pk=getattr(self.instance, 'pk', None)).exists():
             raise serializers.ValidationError({
-                'date_rentree': 'date_rentree must be after or equal to spectacle.date_sortie.'
+                'spectacle_id': 'This spectacle already has a return.'
             })
+
+        date_errors = spectacle_date_errors(spectacle.date_sortie if spectacle else None, date_rentree)
+        if date_errors:
+            raise serializers.ValidationError(date_errors)
 
         # Normalize person from spectacle to prevent mismatch in writes.
         if spectacle:

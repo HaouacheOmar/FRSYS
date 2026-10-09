@@ -1,5 +1,6 @@
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.db import transaction
 from django.utils import timezone
 
 from .models import GuestPresence, UserRole
@@ -44,12 +45,15 @@ def mark_guest_connected(user):
     if not user or not user.is_authenticated:
         return
 
-    presence, _ = GuestPresence.objects.get_or_create(user=user)
-    was_online = presence.is_online
-    presence.connection_count += 1
-    presence.is_online = True
-    presence.last_seen = timezone.now()
-    presence.save(update_fields=["connection_count", "is_online", "last_seen"])
+    # Row lock: two tabs connecting at once must not both read the same count.
+    with transaction.atomic():
+        GuestPresence.objects.get_or_create(user=user)
+        presence = GuestPresence.objects.select_for_update().get(user=user)
+        was_online = presence.is_online
+        presence.connection_count += 1
+        presence.is_online = True
+        presence.last_seen = timezone.now()
+        presence.save(update_fields=["connection_count", "is_online", "last_seen"])
 
     # Notify only when transitioning from offline to online.
     if not was_online:
@@ -68,12 +72,14 @@ def mark_guest_disconnected(user):
     if not user or not user.is_authenticated:
         return
 
-    presence, _ = GuestPresence.objects.get_or_create(user=user)
-    if presence.connection_count > 0:
-        presence.connection_count -= 1
-    presence.is_online = presence.connection_count > 0
-    presence.last_seen = timezone.now()
-    presence.save(update_fields=["connection_count", "is_online", "last_seen"])
+    with transaction.atomic():
+        GuestPresence.objects.get_or_create(user=user)
+        presence = GuestPresence.objects.select_for_update().get(user=user)
+        if presence.connection_count > 0:
+            presence.connection_count -= 1
+        presence.is_online = presence.connection_count > 0
+        presence.last_seen = timezone.now()
+        presence.save(update_fields=["connection_count", "is_online", "last_seen"])
 
     if not presence.is_online:
         _send_admin_event(

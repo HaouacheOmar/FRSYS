@@ -1,12 +1,9 @@
-import cv2
 import os
 import sys
-import numpy as np
+from datetime import timedelta
 from pathlib import Path
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone
-import insightface
-from insightface.app import FaceAnalysis
 
 # Add Django path for model imports
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -17,85 +14,19 @@ import django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'FRSYS.settings')
 django.setup()
 
-from server.models import Person, Spectacle, Rentree, Config
-# Recognition configuration
-from django.conf import settings
+from server.models import Person, Spectacle, Rentree
+from server.services import model_client
 
-DEBUG = False
-THRESHOLD = 0.45  # Cosine similarity threshold
+# Detection, embeddings and matching live in MODEL_SERVER (POST /api/detect). This module
+# only maps a matched identity (the face folder name = matricule) to spectacle status.
 
-
-def get_face_db_path():
-
-    try:
-        cfg = Config.objects.first()
-        if cfg and cfg.dir_path_photo:
-            path = cfg.dir_path_photo.strip()
-            if path:
-                return os.path.abspath(os.path.expanduser(path))
-    except Exception:
-        # If DB isn't available yet, ignore and fallback to settings/env
-        pass
-
-    # Fallback to settings or environment
-    path = getattr(settings, 'FACE_DB_PATH', None) or os.environ.get('FACE_DB_PATH')
-    if path:
-        return os.path.abspath(os.path.expanduser(path))
-    return None
+# After a return is marked the spectacle is closed; keep showing RETURNED for this long
+# instead of flipping to "NOT ON SPECTACLE" while the person is still in front of the camera.
+RECENT_RETURN_SEC = 60
 
 PERSON_LOOKUP_FIELDS = (
     'id', 'mat', 'nom', 'prenom', 'compagnie_id', 'compagnie__label',
 )
-
-print("[INFO] Loading InsightFace for Stream Processor...")
-app = FaceAnalysis(name='buffalo_l')
-app.prepare(ctx_id=0, det_size=(640, 640)) # ctx_id=0 for GPU, -1 for CPU
-
-KNOWN_FACES = {}
-
-def load_face_database():
-    """extract and cache embeddings from the image directory.
-
-    Uses DB-configured path (`Config.dir_path_photo`) if present, otherwise falls
-    back to settings/env.
-    """
-    path = get_face_db_path()
-    print(f"[INFO] Loading faces from {path} into memory...")
-    if not path or not os.path.exists(path):
-        print(f"[WARNING] Database path not found or unset: {path}")
-        return
-
-    # Walk the database directory recursively. If images are placed in
-    # subfolders, use the first-level subfolder name as the identity. If
-    # images are directly in the DB root, use the filename stem as identity.
-    for root, _, files in os.walk(path):
-        for filename in files:
-            if not filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-                continue
-
-            img_path = os.path.join(root, filename)
-            img = cv2.imread(img_path)
-            if img is None:
-                continue
-
-            faces = app.get(img)
-            if not faces:
-                continue
-
-            # Determine identity: top-level subfolder name if present, else filename stem
-            rel = os.path.relpath(root, path)
-            if rel in ('.', ''):
-                person_id = os.path.splitext(filename)[0]
-            else:
-                person_id = Path(rel).parts[0]
-
-            KNOWN_FACES[person_id] = faces[0].normed_embedding
-
-    print(f"[INFO] Loaded {len(KNOWN_FACES)} identities.")
-
-# Load database into memory on startup
-load_face_database()
-
 
 
 def normalize_mat(value):
@@ -158,10 +89,14 @@ def check_spectacle_eligibility(identity, mark_return=False):
 
         if person is None: return False, None, f"{mat} - UNKNOWN PERSON"
 
-        spectacle_record = Spectacle.objects.filter(person_id=person.id, date_rentree__isnull=True).order_by('-date_sortie').first()
+        now_dt = timezone.now()
+        # Only outings that have started; a future-dated one must not be closed on sight.
+        spectacle_record = (
+            Spectacle.objects.filter(person_id=person.id, date_rentree__isnull=True, date_sortie__lte=now_dt)
+            .order_by('-date_sortie').first()
+        )
 
         if spectacle_record:
-            now_dt = timezone.now()
             est_retard = bool(spectacle_record.date_limite_retour and now_dt > spectacle_record.date_limite_retour)
 
             if mark_return:
@@ -191,6 +126,21 @@ def check_spectacle_eligibility(identity, mark_return=False):
             label = f"{person.nom} {person.prenom} - {status}"
             return True, person_info, label
 
+        recent = (
+            Rentree.objects.filter(person_id=person.id, date_rentree__gte=now_dt - timedelta(seconds=RECENT_RETURN_SEC))
+            .select_related('spectacle').order_by('-date_rentree').first()
+        )
+        if recent:
+            status = 'RETURNED - LATE' if recent.est_retard else 'RETURNED - ON TIME'
+            person_info = {
+                'matricule': person.mat, 'nom': person.nom, 'prenom': person.prenom,
+                'compagnie': person.compagnie.label if person.compagnie else 'N/A',
+                'spectacle_id': recent.spectacle_id, 'date_sortie': recent.spectacle.date_sortie,
+                'date_limite_retour': recent.spectacle.date_limite_retour,
+                'date_rentree': recent.date_rentree, 'est_retard': recent.est_retard, 'status': status,
+            }
+            return True, person_info, f"{person.nom} {person.prenom} - {status}"
+
         person_info = {
             'matricule': person.mat, 'nom': person.nom, 'prenom': person.prenom,
             'compagnie': person.compagnie.label if person.compagnie else 'N/A',
@@ -200,58 +150,40 @@ def check_spectacle_eligibility(identity, mark_return=False):
         return False, person_info, label
     except Exception as e:
         print(f"[ERROR] Failed to check person '{mat}': {e}")
+        # The stream worker thread keeps one DB connection for its whole life. After a DB
+        # restart/idle timeout it is dead; drop it so the next lookup reconnects.
+        connection.close()
         return False, None, f"{mat} - ERROR"
 
 
 
 
 def process_frame(frame, scale_x=1.0, scale_y=1.0, recognition_mode='checkin'):
+    """Boxes for every face in the frame, labelled with spectacle status.
+
+    Raises model_client.ModelServerError if the model server is down; the stream worker
+    shows that as the frame error.
+    """
     boxes = []
-    
-    try:
-        # One-shot detection + embedding extraction
-        faces = app.get(frame)
-    except Exception as e:
-        print(f"[ERROR] Face extraction failed: {e}")
-        return boxes
-    
-    frame_h, frame_w = frame.shape[:2]
-    
-    for face in faces:
-        # Get bounding box and calculate width/height
-        x1, y1, x2, y2 = face.bbox.astype(int)
+    should_mark_return = str(recognition_mode).lower() == 'return'
+
+    for face in model_client.detect(frame):
+        x1, y1, x2, y2 = face["bbox"]
         w, h = x2 - x1, y2 - y1
-        
         if w <= 0 or h <= 0:
             continue
-            
+
         # Create box info scaling back to original frame size
         box_info = {
             "box": (int(x1 * scale_x), int(y1 * scale_y), int(w * scale_x), int(h * scale_y)),
             "color": (0, 0, 255),  # Red default
             "label": "No match",
         }
-        
-        # Match against database in memory
-        target_embedding = face.normed_embedding
-        best_match_identity = None
-        best_similarity = -1.0
-        
-        if KNOWN_FACES:
-            for identity, db_embedding in KNOWN_FACES.items():
-                similarity = np.dot(target_embedding, db_embedding)
-                if similarity > best_similarity:
-                    best_similarity = similarity
-                    best_match_identity = identity
-                    
-        if best_match_identity and best_similarity >= THRESHOLD:
-            
-            should_mark_return = str(recognition_mode).lower() == 'return'
-            is_eligible, person_info, label = check_spectacle_eligibility(
-                best_match_identity,
-                mark_return=should_mark_return,
-            )
-            
+
+        identity = face.get("person_id")
+        if identity:
+            is_eligible, person_info, label = check_spectacle_eligibility(identity, mark_return=should_mark_return)
+
             if is_eligible:
                 box_info["color"] = (0, 255, 0)
                 box_info["eligible"] = True
@@ -264,8 +196,8 @@ def process_frame(frame, scale_x=1.0, scale_y=1.0, recognition_mode='checkin'):
                 box_info["label"] = label
             else:
                 box_info["color"] = (0, 255, 0)
-                box_info["label"] = f"{best_match_identity} ({best_similarity:.2f})"
-        
+                box_info["label"] = f"{identity} ({face.get('similarity', 0):.2f})"
+
         boxes.append(box_info)
-    
+
     return boxes
