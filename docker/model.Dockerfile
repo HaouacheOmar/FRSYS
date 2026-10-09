@@ -6,8 +6,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+# sed strips CRLF endings (Windows checkout), which grep -x would not match.
 COPY requirements.txt /tmp/requirements.txt
-RUN grep -xE 'fastapi|uvicorn|python-multipart|python-dotenv|numpy|opencv-python-headless|onnxruntime|insightface' /tmp/requirements.txt > /tmp/model.txt \
+RUN sed 's/\r$//' /tmp/requirements.txt | grep -xE 'fastapi|uvicorn|python-multipart|python-dotenv|numpy|opencv-python-headless|onnxruntime|insightface' > /tmp/model.txt \
     && pip install --no-cache-dir -r /tmp/model.txt
 
 COPY servers/MODEL_SERVER/ /app/

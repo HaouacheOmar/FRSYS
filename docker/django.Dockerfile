@@ -7,8 +7,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
 
 WORKDIR /app
 # One requirements.txt serves both servers; Django doesn't need the model stack.
+# sed strips CRLF endings (Windows checkout), which grep -x would not match.
 COPY requirements.txt /tmp/requirements.txt
-RUN grep -vxE 'fastapi|uvicorn|python-multipart|onnxruntime|insightface' /tmp/requirements.txt > /tmp/django.txt \
+RUN sed 's/\r$//' /tmp/requirements.txt | grep -vxE 'fastapi|uvicorn|python-multipart|onnxruntime|insightface' > /tmp/django.txt \
     && pip install --no-cache-dir -r /tmp/django.txt
 
 COPY servers/DJANGO_SERVER/ /app/
