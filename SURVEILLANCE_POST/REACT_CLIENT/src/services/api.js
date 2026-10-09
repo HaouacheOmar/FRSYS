@@ -21,16 +21,24 @@ const getCookie = (name) => {
   return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : '';
 };
 
-const ensureCsrfCookie = async () => {
-  if (getCookie('csrftoken')) return;
+// The token comes from the /auth/csrf/ response body: when the frontend and the API are on
+// different hosts, the page can't read the API's csrftoken cookie.
+let csrfTokenFromApi = '';
+const getCsrfToken = async () => {
+  if (csrfTokenFromApi) return csrfTokenFromApi;
   if (!csrfFetchPromise) {
-    csrfFetchPromise = fetch(`${API_BASE_URL}/auth/csrf/`, {
-      credentials: 'include',
-    }).finally(() => {
-      csrfFetchPromise = null;
-    });
+    csrfFetchPromise = fetch(`${API_BASE_URL}/auth/csrf/`, { credentials: 'include' })
+      .then((response) => (response.ok ? response.json() : {}))
+      .then((data) => {
+        csrfTokenFromApi = data?.csrfToken || '';
+      })
+      .catch(() => {})
+      .finally(() => {
+        csrfFetchPromise = null;
+      });
   }
   await csrfFetchPromise;
+  return csrfTokenFromApi || getCookie('csrftoken');
 };
 
 // Auth endpoints that must never trigger a refresh-and-retry on 401.
@@ -75,8 +83,7 @@ const rawFetch = async (url, options = {}) => {
   };
 
   if (CSRF_METHODS.has(method)) {
-    await ensureCsrfCookie();
-    const csrfToken = getCookie('csrftoken');
+    const csrfToken = await getCsrfToken();
     if (csrfToken) {
       headers['X-CSRFToken'] = csrfToken;
     }

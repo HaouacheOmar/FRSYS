@@ -522,3 +522,92 @@ class WebSocketOriginTests(TransactionTestCase):
 
     def test_other_site_is_refused(self):
         self.assertFalse(self.connect_from("http://evil.example"))
+
+
+class CookieCsrfTests(TestCase):
+    """Cookie-authenticated writes need the CSRF token; Authorization-header clients don't."""
+
+    def setUp(self):
+        from rest_framework_simplejwt.tokens import AccessToken
+
+        admin = get_user_model().objects.create_user("admin", password="x", is_staff=True)
+        self.token = str(AccessToken.for_user(admin))
+        self.client = APIClient(enforce_csrf_checks=True)
+
+    def test_cookie_write_without_csrf_token_is_refused(self):
+        self.client.cookies["access_token"] = self.token
+        response = self.client.post("/api/compagnies/", {"label": "X"}, format="json")
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Compagnie.objects.exists())
+
+    def test_cookie_write_with_csrf_token_from_api_works(self):
+        self.client.cookies["access_token"] = self.token
+        csrf = self.client.get("/api/auth/csrf/").json()["csrfToken"]
+        response = self.client.post("/api/compagnies/", {"label": "X"}, format="json", HTTP_X_CSRFTOKEN=csrf)
+        self.assertEqual(response.status_code, 201)
+
+    def test_cookie_reads_need_no_csrf_token(self):
+        self.client.cookies["access_token"] = self.token
+        self.assertEqual(self.client.get("/api/compagnies/").status_code, 200)
+
+    def test_header_auth_needs_no_csrf_token(self):
+        response = self.client.post("/api/compagnies/", {"label": "X"}, format="json", HTTP_AUTHORIZATION=f"Bearer {self.token}")
+        self.assertEqual(response.status_code, 201)
+
+
+class PhotoPathSecurityTests(TestCase):
+    def setUp(self):
+        import tempfile
+
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.base = self.tmp.name
+        admin = get_user_model().objects.create_user("admin", password="x", is_staff=True)
+        self.client = APIClient()
+        self.client.force_authenticate(admin)
+
+    def settings_for_base(self):
+        from django.test import override_settings
+
+        return override_settings(PHOTOS_BASE_DIR=self.base, MAX_PHOTOS_ZIP_BYTES=1000, MAX_PHOTOS_ZIP_ENTRIES=5)
+
+    def test_dir_path_outside_photos_folder_is_refused(self):
+        import os
+
+        with self.settings_for_base():
+            outside = self.client.post("/api/config/photo-path/", {"dir_path": os.path.dirname(self.base)}, format="json")
+            inside = self.client.post("/api/config/photo-path/", {"dir_path": os.path.join(self.base, "x")}, format="json")
+        self.assertEqual(outside.status_code, 400)
+        self.assertEqual(inside.status_code, 200)
+
+    def test_main_photo_only_served_from_photos_folder(self):
+        import os
+        import tempfile
+
+        elsewhere = tempfile.TemporaryDirectory()
+        self.addCleanup(elsewhere.cleanup)
+        open(os.path.join(elsewhere.name, "main.jpg"), "wb").write(b"jpg")
+        os.makedirs(os.path.join(self.base, "M2"))
+        open(os.path.join(self.base, "M2", "main.svg"), "wb").write(b"<svg/>")
+        comp = Compagnie.objects.create(label="A")
+        p1 = Person.objects.create(mat="M1", nom="N", prenom="P", compagnie=comp, path_dir_photo=elsewhere.name)
+        p2 = Person.objects.create(mat="M2", nom="N", prenom="P", compagnie=comp)
+
+        with self.settings_for_base():
+            self.assertEqual(self.client.get(f"/api/persons/{p1.id}/main-photo/").status_code, 404)
+            self.assertEqual(self.client.get(f"/api/persons/{p2.id}/main-photo/").status_code, 404)  # svg not served
+
+    def test_oversized_or_invalid_zip_is_refused(self):
+        import io
+        import zipfile
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("a/main.jpg", b"0" * 5000)  # compresses small, 5000 bytes uncompressed
+        with self.settings_for_base():
+            big = self.client.post("/api/config/photo-path/", {"zip": SimpleUploadedFile("p.zip", buffer.getvalue())}, format="multipart")
+            bad = self.client.post("/api/config/photo-path/", {"zip": SimpleUploadedFile("p.zip", b"not a zip")}, format="multipart")
+        self.assertEqual(big.status_code, 400)
+        self.assertEqual(bad.status_code, 400)

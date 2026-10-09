@@ -59,6 +59,16 @@ def api_status(request):
     })
 
 
+def _inside_photos_base(path):
+    """True if `path` resolves to PHOTOS_BASE_DIR or a folder inside it (admins can set
+    photo folders, so without this they could point the API at any file on the server)."""
+    base = os.path.realpath(settings.PHOTOS_BASE_DIR)
+    try:
+        return os.path.commonpath([base, os.path.realpath(path)]) == base
+    except ValueError:  # different drives on Windows
+        return False
+
+
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated, IsAdminRole])
 def config_photo_path_view(request):
@@ -86,6 +96,8 @@ def config_photo_path_view(request):
         path = str(dir_path).strip()
         if not path:
             return Response({'message': 'dir_path is empty.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not _inside_photos_base(path):
+            return Response({'message': 'dir_path must be inside the photos folder (FACE_DB_PATH).'}, status=status.HTTP_400_BAD_REQUEST)
         cfg = Config.objects.first()
         if cfg:
             cfg.dir_path_photo = path
@@ -95,17 +107,22 @@ def config_photo_path_view(request):
         return Response({'dir_path_photo': path})
 
     try:
-        base = getattr(settings, 'PHOTOS_BASE_DIR', '') or getattr(settings, 'FACE_DB_PATH', '') or os.getcwd()
-        target_root = os.path.abspath(base)
+        z = zipfile.ZipFile(uploaded_zip)
+    except zipfile.BadZipFile:
+        return Response({'message': 'Not a valid zip file.'}, status=status.HTTP_400_BAD_REQUEST)
+    # Check the declared sizes before extracting anything (zip bombs fill the disk).
+    entries = z.infolist()
+    if len(entries) > settings.MAX_PHOTOS_ZIP_ENTRIES or sum(e.file_size for e in entries) > settings.MAX_PHOTOS_ZIP_BYTES:
+        return Response({'message': 'Zip file is too large.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        target_root = os.path.abspath(settings.PHOTOS_BASE_DIR)
         # create a timestamped folder
-        import datetime
-        folder_name = f"photos_{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+        folder_name = f"photos_{timezone.now().strftime('%Y%m%d%H%M%S')}"
         target_dir = os.path.join(target_root, folder_name)
         os.makedirs(target_dir, exist_ok=True)
 
-        # Read zip into memory and extract
-        z = zipfile.ZipFile(uploaded_zip)
-        z.extractall(target_dir)
+        z.extractall(target_dir)  # extractall drops '..' and absolute member paths
 
         cfg = Config.objects.first()
         if cfg:
@@ -240,10 +257,12 @@ class PersonViewSet(viewsets.ModelViewSet):
         if not base_dir:
             return Response({'detail': 'path_dir_photo is empty and PHOTOS_BASE_DIR is not configured.'}, status=status.HTTP_404_NOT_FOUND)
 
-        if not os.path.isdir(base_dir):
-            return Response({'detail': f'Photo directory does not exist: {base_dir}'}, status=status.HTTP_404_NOT_FOUND)
+        # path_dir_photo is admin-editable: only ever serve from inside the photos folder.
+        if not _inside_photos_base(base_dir) or not os.path.isdir(base_dir):
+            return Response({'detail': 'Photo directory not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-        allowed_exts = {'.png', '.jpg', '.jpeg', '.svg', '.webp'}
+        # No .svg: an SVG opened directly can run script.
+        allowed_exts = {'.png', '.jpg', '.jpeg', '.webp'}
 
         for filename in os.listdir(base_dir):
             name, ext = os.path.splitext(filename)

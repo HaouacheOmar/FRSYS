@@ -17,9 +17,8 @@ from server.ws_auth import JWTAuthMiddleware  # noqa: E402
 # WebSockets authenticate with the auth cookie, which the browser also sends when a page
 # on another site opens the socket. Only accept the frontend's own origins: the same list
 # that may call the API with credentials (CORS_ALLOWED_ORIGINS).
+# (settings add the local dev server when DEBUG is on.)
 WEBSOCKET_ALLOWED_ORIGINS = list(settings.CORS_ALLOWED_ORIGINS)
-if settings.DEBUG:
-    WEBSOCKET_ALLOWED_ORIGINS += ['http://localhost:3000', 'http://127.0.0.1:3000']
 
 application = ProtocolTypeRouter({
     'http': django_asgi_app,

@@ -23,10 +23,14 @@ DEBUG = env_bool('DEBUG', False)
 
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', '*').split(',') if host.strip()]
 
+# The frontend origin(s). Single source for CORS, CSRF_TRUSTED_ORIGINS and the WebSocket origin check.
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv('CORS_ALLOWED_ORIGINS', '').split(',') if origin.strip()]
+if DEBUG:  # local Vite dev server
+    CORS_ALLOWED_ORIGINS += [o for o in ('http://localhost:3000', 'http://127.0.0.1:3000') if o not in CORS_ALLOWED_ORIGINS]
 CORS_ALLOW_CREDENTIALS = True
 
-CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if origin.strip()]
+# Origins allowed to send unsafe requests. Defaults to the frontend origins in CORS_ALLOWED_ORIGINS.
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if origin.strip()] or list(CORS_ALLOWED_ORIGINS)
 CSRF_COOKIE_SECURE = env_bool('CSRF_COOKIE_SECURE', False)
 
 INSTALLED_APPS = [
@@ -198,5 +202,9 @@ REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'] = {
     'auth_role_grant': os.getenv('THROTTLE_AUTH_ROLE_GRANT', '80/hour').strip(),
     'auth_guest_manage': os.getenv('THROTTLE_AUTH_GUEST_MANAGE', '200/hour').strip(),
 }
-PHOTOS_BASE_DIR='/data/faces'
+# Face photos root (<mat>/main.jpg). MODEL_SERVER reads the same FACE_DB_PATH. Every photo
+# folder the API accepts or serves must be inside it.
+PHOTOS_BASE_DIR = os.getenv('FACE_DB_PATH', '/data/faces').strip()
+MAX_PHOTOS_ZIP_BYTES = 500 * 1024 * 1024  # uncompressed total
+MAX_PHOTOS_ZIP_ENTRIES = 20000
 MODEL_SERVER_URL = os.getenv('MODEL_SERVER_URL', 'http://localhost:5000').strip()
